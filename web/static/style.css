@@ -127,7 +127,7 @@ button.small { font-size: 13px; font-weight: 600; padding: 3px 10px;
 
 .bar {
   position: fixed; left: 0; right: 0; bottom: 0;
-  display: flex; justify-content: center; gap: 16px; padding: 14px 16px;
+  display: flex; justify-content: center; gap: 24px; padding: 14px 16px;
   background: rgba(22, 41, 58, .94); border-top: 1px solid var(--line);
   backdrop-filter: blur(6px);
 }
