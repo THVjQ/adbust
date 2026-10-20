@@ -148,6 +148,35 @@ async function readApps() {
   return apps;
 }
 
+// Fetch launcher icons for the given packages and stash a data URL on each
+// app record. Done in chunks because each icon is a base64 PNG. Returns true
+// if any new icon was added, so the caller knows to re-render.
+async function loadIcons(pkgs) {
+  const want = [...new Set(pkgs)]
+    .filter((p) => state.apps.get(p) && !state.apps.get(p).icon);
+  if (!want.length) return false;
+  let got = false;
+  try {
+    await pushHelper();
+    for (let i = 0; i < want.length; i += 40) {
+      const chunk = want.slice(i, i + 40);          // pkg names are [\w.]+, safe unquoted
+      const out = await sh(`CLASSPATH=${HELPER} app_process / AppList --icons ` +
+                           chunk.join(" "));
+      for (const line of out.split("\n")) {
+        const t = line.indexOf("\t");
+        if (t < 0) continue;
+        const pkg = line.slice(0, t), b64 = line.slice(t + 1).replace(/\r$/, "");
+        const a = state.apps.get(pkg);
+        if (a && b64) { a.icon = "data:image/png;base64," + b64; got = true; }
+      }
+    }
+    await sh(`rm -f ${HELPER}`);
+  } catch (e) {
+    console.warn("icon fetch failed", e);
+  }
+  return got;
+}
+
 async function readHome() {
   const out = await sh("cmd package resolve-activity --brief " +
     "-a android.intent.action.MAIN -c android.intent.category.HOME");
@@ -255,6 +284,9 @@ async function connect(device) {
     state.home = home;
     renderApps();
     showStep("main");
+    // Icons load in the background so they don't hold up the list.
+    loadIcons([...apps.values()].filter((a) => a.launcher || !a.system)
+      .map((a) => a.pkg)).then((ok) => { if (ok) { renderApps(); renderOpened(); } });
     const known = [...apps.values()]
       .filter((a) => !a.system && state.bad.has(a.pkg));
     if (known.length) askKnown(known);
@@ -474,7 +506,10 @@ function appRow(a, extra = []) {
                         `removed by ${bad.reports}`));
   if (!a.launcher && !a.system) tags.push(el("span", { className: "tag" },
                                              "no icon"));
-  return el("label", { className: `row${a.system ? " locked" : ""}` }, box,
+  const ico = a.icon
+    ? el("img", { className: "ico", src: a.icon, alt: "", loading: "lazy" })
+    : el("span", { className: "ico ph" });
+  return el("label", { className: `row${a.system ? " locked" : ""}` }, box, ico,
     el("span", { className: "name" }, a.label || a.pkg),
     el("span", { className: "pkg" }, a.pkg), ...tags, ...extra);
 }
@@ -504,28 +539,66 @@ function buildSys() {
   sl.replaceChildren(...sys.map((a) => appRow(a)));
 }
 
+const openedIsSystem = (o) => !!(state.apps.get(o.pkg) || {}).system;
+
+function openedRow(o) {
+  const a = state.apps.get(o.pkg) ||
+    { pkg: o.pkg, label: nameOf(o.pkg), system: false, launcher: true };
+  const kind = el("span", { className: `kind ${o.kind}` },
+    o.kind === "AD" ? "AD" : o.kind === "OVERLAY" ? "draws over" : "opened");
+  const when = el("span", { className: "when" },
+    `${fmtTime(o.last)}${o.count > 1 ? ` · ${o.count}×` : ""}`);
+  const row = appRow(a, [when]);
+  row.prepend(kind);
+  if (o.removed) {
+    row.classList.add("gone");
+    row.querySelector("input").disabled = true;
+    row.querySelector("input").checked = false;
+    row.append(el("span", { className: "tag ok" }, "removed"));
+  }
+  return row;
+}
+
 function renderOpened() {
   const rows = [...state.opened.values()].sort((a, b) =>
     RANK[b.kind] - RANK[a.kind] || b.last - a.last);
   $("#opened-count").textContent = rows.filter((o) => !o.removed).length;
   $("#opened-empty").hidden = rows.length > 0;
-  $("#opened-list").replaceChildren(...rows.map((o) => {
-    const a = state.apps.get(o.pkg) ||
-      { pkg: o.pkg, label: nameOf(o.pkg), system: false, launcher: true };
-    const kind = el("span", { className: `kind ${o.kind}` },
-      o.kind === "AD" ? "AD" : o.kind === "OVERLAY" ? "draws over" : "opened");
-    const when = el("span", { className: "when" },
-      `${fmtTime(o.last)}${o.count > 1 ? ` · ${o.count}×` : ""}`);
-    const row = appRow(a, [when]);
-    row.prepend(kind);
-    if (o.removed) {
-      row.classList.add("gone");
-      row.querySelector("input").disabled = true;
-      row.querySelector("input").checked = false;
-      row.append(el("span", { className: "tag ok" }, "removed"));
-    }
-    return row;
-  }));
+
+  // Group user apps above system apps; each group keeps the rank/recency sort.
+  const user = rows.filter((o) => !openedIsSystem(o));
+  const sys = rows.filter((o) => openedIsSystem(o));
+  const out = [];
+  if (user.length) {
+    out.push(el("div", { className: "grouphead" }, "User apps"));
+    out.push(...user.map(openedRow));
+  }
+  if (sys.length) {
+    out.push(el("div", { className: "grouphead" },
+      "System apps — part of the phone, can't be removed"));
+    out.push(...sys.map(openedRow));
+  }
+  $("#opened-list").replaceChildren(...out);
+
+  // Pull icons for anything that popped up but hasn't got one yet.
+  const missing = rows.map((o) => o.pkg)
+    .filter((p) => state.apps.get(p) && !state.apps.get(p).icon);
+  if (missing.length && state.adb && !state.iconBusy) {
+    state.iconBusy = true;
+    loadIcons(missing).then((ok) => {
+      state.iconBusy = false;
+      if (ok) { renderOpened(); renderApps(); }
+    });
+  }
+
+  // Select-all only applies to removable user apps that are still present.
+  const pick = user.filter((o) => !o.removed);
+  const allSel = pick.length > 0 && pick.every((o) => state.picked.has(o.pkg));
+  const sa = $("#opened-selectall");
+  if (sa) {
+    sa.hidden = pick.length === 0;
+    sa.textContent = allSel ? "Clear selection" : "Select all";
+  }
   renderBar();
 }
 
@@ -562,6 +635,15 @@ function init() {
   });
   $("#remove").addEventListener("click", () =>
     removeMany([...state.picked], "manual"));
+  $("#opened-selectall").addEventListener("click", () => {
+    const pick = [...state.opened.values()]
+      .filter((o) => !o.removed && !openedIsSystem(o));
+    const allSel = pick.length > 0 && pick.every((o) => state.picked.has(o.pkg));
+    for (const o of pick)
+      allSel ? state.picked.delete(o.pkg) : state.picked.add(o.pkg);
+    renderOpened();
+    renderApps();
+  });
   $("#known-yes").addEventListener("click", removeKnown);
   $("#known-no").addEventListener("click", () => {
     $("#known").close();

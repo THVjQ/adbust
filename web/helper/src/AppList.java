@@ -4,8 +4,13 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.drawable.Drawable;
 import android.os.Looper;
+import android.util.Base64;
 
+import java.io.ByteArrayOutputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -49,8 +54,38 @@ public class AppList {
         return s == null ? "" : s.toString().replace('\t', ' ').replace('\n', ' ').trim();
     }
 
+    // Render each requested package's launcher icon to a small PNG and print
+    //   pkg  base64png
+    // one per line. Called as: app_process / AppList --icons pkg1 pkg2 ...
+    static void printIcons(PackageManager pm, String[] args) {
+        final int size = 72;
+        StringBuilder out = new StringBuilder();
+        for (int i = 1; i < args.length; i++) {
+            String pkg = args[i];
+            try {
+                Drawable d = pm.getApplicationInfo(pkg, 0).loadIcon(pm);
+                Bitmap bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+                Canvas c = new Canvas(bmp);
+                d.setBounds(0, 0, size, size);
+                d.draw(c);
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                bmp.compress(Bitmap.CompressFormat.PNG, 100, bos);
+                bmp.recycle();
+                out.append(pkg).append('\t')
+                   .append(Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP))
+                   .append('\n');
+            } catch (Throwable t) { /* skip apps we can't render */ }
+        }
+        System.out.print(out);
+        System.out.flush();
+    }
+
     public static void main(String[] args) throws Exception {
         PackageManager pm = systemContext().getPackageManager();
+        if (args.length > 0 && "--icons".equals(args[0])) {
+            printIcons(pm, args);
+            return;
+        }
         Set<String> launchers = new HashSet<>();
         Intent main = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
         for (ResolveInfo ri : pm.queryIntentActivities(main, 0)) {
