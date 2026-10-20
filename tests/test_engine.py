@@ -123,6 +123,14 @@ class Actions(unittest.TestCase):
         self.phone.enable(CLEANER)
         self.assertNotIn(CLEANER, self.phone.disabled)
 
+    def test_install_result_ignores_incremental_chatter(self):
+        # real output from a Galaxy S21 FE on Android 16
+        self.phone._answer = lambda a: (
+            "Success\nServing...\nAll files should be loaded. "
+            "Notifying the device.\nPerforming Incremental Install\n"
+            "Install command complete in 378 ms\n")
+        self.assertEqual(self.phone.install("x.apk"), "Success")
+
     def test_window_state(self):
         self.phone.focus = (ADWARE, f"{ADWARE}.AdActivity")
         self.phone.overlay_windows = {CLEANER}

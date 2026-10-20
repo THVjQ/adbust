@@ -937,7 +937,12 @@ class Device:
 
     def install(self, apk_path):
         out = self._run(["install", "-r", str(apk_path)], timeout=300)
-        return out.strip().splitlines()[-1] if out.strip() else "no output"
+        lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
+        # Incremental installs print progress chatter around the result.
+        for ln in lines:
+            if ln.startswith(("Success", "Failure")):
+                return ln
+        return lines[-1] if lines else "no output"
 
 
 def list_devices(adb_path):

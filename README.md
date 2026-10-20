@@ -15,6 +15,8 @@ customer's phone in over USB, and adbust:
 - logs every job (handset, serial, what was done) so you can look back
 
 One Python file, standard library only, runs on **Windows and Linux**.
+Tested on a real Samsung Galaxy S21 FE (Android 16) as well as the fake
+handset in `tests/`.
 
 ![Apps tab](docs/apps.png)
 ![Live popup watch](docs/watch.png)
