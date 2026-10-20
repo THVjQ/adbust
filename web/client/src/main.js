@@ -50,6 +50,7 @@ const state = {
   guard: null,             // interval that re-stops kept apps
   runTimer: null,          // interval that refreshes the running list
   view: "main",            // "main" or "adv" (full-page Advanced)
+  log: [],                 // recent adb commands + replies, for the console
 };
 
 // ------------------------------------------------------------ platform
@@ -94,7 +95,22 @@ function showStep(name) {
 
 // ------------------------------------------------------------ adb helpers
 
-const sh = (cmd) => state.adb.subprocess.noneProtocol.spawnWaitText(cmd);
+function logCmd(cmd, out, err) {
+  state.log.push({ t: Date.now(), cmd, out: (out || "").slice(0, 600), err: !!err });
+  if (state.log.length > 200) state.log.shift();
+  if (state.view === "adv") renderLog();
+}
+
+const sh = async (cmd) => {
+  try {
+    const out = await state.adb.subprocess.noneProtocol.spawnWaitText(cmd);
+    logCmd(cmd, out, false);
+    return out;
+  } catch (e) {
+    logCmd(cmd, String(e?.message || e), true);
+    throw e;
+  }
+};
 
 async function pushHelper() {
   const res = await fetch("adbust-applist.dex", { cache: "no-cache" });
@@ -933,6 +949,65 @@ async function declawFlagged() {
   advReview();
 }
 
+function fmtDur(sec) {
+  const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600),
+        m = Math.floor(sec % 3600 / 60);
+  return (d ? `${d}d ` : "") + (d || h ? `${h}h ` : "") + `${m}m`;
+}
+
+async function advDevice() {
+  const box = $("#adv-device");
+  box.replaceChildren(el("p", { className: "hint" }, "Reading…"));
+  const rows = [];
+  const add = (k, v) => rows.push(el("div", { className: "kv" },
+    el("span", { className: "k" }, k), el("span", { className: "v" }, v)));
+  const g = async (p) => (await sh(`getprop ${p}`)).trim();
+  try {
+    add("Model", `${await g("ro.product.manufacturer")} ${await g("ro.product.model")}`.trim());
+    add("Android", `${await g("ro.build.version.release")} (API ${await g("ro.build.version.sdk")})`);
+    add("Security patch", (await g("ro.build.version.security_patch")) || "—");
+    add("Build", await g("ro.build.display.id"));
+    add("Serial", state.device?.serial || "—");
+    const bat = await sh("dumpsys battery");
+    const lvl = (bat.match(/level:\s*(\d+)/) || [])[1];
+    const temp = (bat.match(/temperature:\s*(\d+)/) || [])[1];
+    if (lvl) add("Battery", `${lvl}%${temp ? ` · ${(temp / 10).toFixed(1)}°C` : ""}`);
+    const df = (await sh("df /data")).trim().split("\n").pop().split(/\s+/);
+    if (df.length >= 5) add("Storage /data", `${df[2]} used of ${df[1]} (${df[4]} full)`);
+    const up = (await sh("cat /proc/uptime")).trim().split(" ")[0];
+    if (up) add("Uptime", fmtDur(+up));
+    const apps = [...state.apps.values()];
+    add("Apps", `${apps.filter((a) => !a.system).length} user · ` +
+                `${apps.filter((a) => a.system).length} system`);
+    box.replaceChildren(...rows);
+  } catch (e) {
+    box.replaceChildren(el("p", { className: "hint" },
+      "Couldn't read the phone: " + (e?.message || e)));
+  }
+}
+
+function renderLog() {
+  const box = $("#adv-log");
+  if (!box) return;
+  box.replaceChildren(...state.log.map((e) => {
+    const line = el("div", { className: `logentry${e.err ? " err" : ""}` });
+    line.append(el("div", { className: "logcmd" }, "› " + e.cmd));
+    const out = e.out.trim();
+    if (out) line.append(el("div", { className: "logout" },
+      out.length > 500 ? out.slice(0, 500) + "…" : out));
+    return line;
+  }));
+  box.scrollTop = box.scrollHeight;
+}
+
+async function runManual() {
+  const inp = $("#adv-cmd");
+  const cmd = inp.value.trim();
+  if (!cmd || !state.adb) return;
+  inp.value = "";
+  try { await sh(cmd); } catch { /* logCmd already recorded the error */ }
+}
+
 function openAdv() {
   state.view = "adv";
   $("#adv-n").textContent = suspects().length;
@@ -941,6 +1016,8 @@ function openAdv() {
   $("#bar").hidden = true;
   $("#advanced").hidden = true;
   window.scrollTo(0, 0);
+  renderLog();
+  advDevice();
   advReview();
 }
 
@@ -995,6 +1072,11 @@ function init() {
   $("#advanced").addEventListener("click", openAdv);
   $("#adv-back").addEventListener("click", openBasic);
   $("#adv-declaw").addEventListener("click", declawFlagged);
+  $("#adv-run").addEventListener("click", runManual);
+  $("#adv-cmd").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") runManual();
+  });
+  $("#adv-clear").addEventListener("click", () => { state.log = []; renderLog(); });
   $("#harden-cancel").addEventListener("click", () => $("#harden").close());
   $("#h-all").addEventListener("change", (e) => {
     for (const b of document.querySelectorAll("#harden .list input[type=checkbox]"))

@@ -133,6 +133,11 @@
       here runs over the phone's debug connection and is reversible unless noted.</p>
 
     <div class="card">
+      <h2>Device</h2>
+      <div id="adv-device" class="kvlist"><p class="hint">Reading…</p></div>
+    </div>
+
+    <div class="card">
       <h2>What adware hijacks on this phone</h2>
       <p class="hint">Adware abuses these to pop up, watch the screen, or stay
         alive. Review each list and revoke anything you don't recognise — leave
@@ -149,6 +154,20 @@
         popping up, or in the shared database.</p>
       <button id="adv-declaw" class="primary">Declaw flagged apps</button>
       <p id="adv-declaw-result" class="hint" hidden></p>
+    </div>
+
+    <div class="card">
+      <h2>ADB console</h2>
+      <p class="hint">Every command adbust sends to the phone and the reply it
+        gets back, newest at the bottom. You can also type an <code>adb
+        shell</code> command and run it yourself.</p>
+      <div class="cmdrow">
+        <input id="adv-cmd" type="text" spellcheck="false" autocomplete="off"
+          placeholder="e.g. getprop ro.build.version.release">
+        <button id="adv-run" class="primary">Run</button>
+        <button id="adv-clear">Clear</button>
+      </div>
+      <div id="adv-log" class="log"></div>
     </div>
 
     <div class="card">

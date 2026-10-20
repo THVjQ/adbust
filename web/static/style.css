@@ -37,6 +37,23 @@ header {
   gap: 16px; flex-wrap: wrap; margin-bottom: 4px; }
 .advtop h1 { margin: 0; }
 section[data-step="adv"] > .hint { margin-top: 0; }
+.kvlist { display: grid; grid-template-columns: max-content 1fr; gap: 4px 18px; }
+.kv { display: contents; }
+.kv .k { color: var(--muted); }
+.kv .v { font-weight: 600; word-break: break-word; }
+.cmdrow { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.cmdrow input { flex: 1; min-width: 180px; font: inherit; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--raised); color: var(--text);
+  font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+.log { max-height: 320px; overflow: auto; background: #0b141d;
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px;
+  font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+.log:empty::before { content: "No commands yet."; color: var(--muted); }
+.logentry { margin-bottom: 7px; }
+.logcmd { color: var(--accent); white-space: pre-wrap; word-break: break-all; }
+.logout { color: var(--muted); white-space: pre-wrap; word-break: break-all; }
+.logentry.err .logout { color: var(--bad); }
 .phone { color: var(--text); font-weight: 600; }
 
 main { max-width: 980px; margin: 0 auto; padding: 20px 16px; }
