@@ -11,7 +11,7 @@
 <body>
 <header>
   <div class="brand"><strong>adbust</strong><span>remove popup &amp; adware apps</span></div>
-  <div class="head-right">
+  <div class="head-right" style="display:flex;align-items:center;gap:14px;flex-wrap:nowrap">
     <div id="phone" class="phone"></div>
     <button id="advanced" class="small" hidden>Advanced</button>
   </div>
@@ -123,6 +123,61 @@
       </details>
     </div>
   </section>
+
+  <section data-step="adv" hidden>
+    <div class="advtop">
+      <h1>Advanced</h1>
+      <button id="adv-back" class="primary">← Basic mode</button>
+    </div>
+    <p class="hint">Deeper checks and tweaks, like the desktop tool. Everything
+      here runs over the phone's debug connection and is reversible unless noted.</p>
+
+    <div class="card">
+      <h2>What adware hijacks on this phone</h2>
+      <p class="hint">Adware abuses these to pop up, watch the screen, or stay
+        alive. Review each list and revoke anything you don't recognise — leave
+        the apps you trust alone.</p>
+      <div id="adv-review" class="list"><p class="hint">Reading…</p></div>
+    </div>
+
+    <div class="card">
+      <h2>Declaw flagged apps <span class="count" id="adv-n">0</span></h2>
+      <p class="hint">Takes away a flagged app's ability to interrupt — blocks
+        overlays, notifications and background starts, revokes accessibility and
+        notification access, drops battery exemption, and force-stops it —
+        without uninstalling it. Flagged apps are the ones ticked, caught
+        popping up, or in the shared database.</p>
+      <button id="adv-declaw" class="primary">Declaw flagged apps</button>
+      <p id="adv-declaw-result" class="hint" hidden></p>
+    </div>
+
+    <div class="card">
+      <h2>Other things worth knowing</h2>
+      <details class="help">
+        <summary>Freeze vs uninstall, device admins, and manual steps</summary>
+        <div class="hint">
+          <p><b>Freeze instead of remove:</b> if you're not sure about an app,
+            freezing it (<code>pm disable-user</code>) stops it running but keeps
+            it, and it's undone with <code>pm enable</code>. Uninstalling a
+            pre-installed app for this user (<code>pm uninstall --user 0</code>)
+            survives reboots and can be restored with
+            <code>cmd package install-existing</code>.</p>
+          <p><b>Device admins:</b> an app registered as a device admin can't be
+            uninstalled until admin is removed. The “Open on phone” button above
+            tries to drop it, then opens the app's page on the handset so you can
+            turn admin off under Settings → Security → Device admin apps.</p>
+          <p><b>Has to be done on the phone itself:</b> browser site
+            notifications (Chrome / Samsung Internet), checking Play Protect is
+            on, and Family Link for a child's phone.</p>
+          <p><b>Brand quirks:</b> on Oppo/Realme/OnePlus turn on Developer
+            options → “Disable permission monitoring”, on Xiaomi enable USB
+            debugging (Security), and on Samsung turn Auto Blocker back on when
+            you're done — otherwise some of these commands are silently
+            blocked.</p>
+        </div>
+      </details>
+    </div>
+  </section>
 </main>
 
 <div id="bar" class="bar" hidden>
@@ -165,56 +220,6 @@
   </div>
 </dialog>
 
-<dialog id="adv">
-  <h2>Advanced</h2>
-  <p class="hint">Deeper checks and tweaks, like the desktop tool. Everything
-    here runs over the phone's debug connection and is reversible unless noted.</p>
-
-  <h3>What adware hijacks on this phone</h3>
-  <p class="hint">Adware abuses these to pop up, watch the screen, or stay
-    alive. Review each list and revoke anything you don't recognise — leave the
-    apps you trust alone.</p>
-  <div id="adv-review" class="list"><p class="hint">Reading…</p></div>
-
-  <h3>Declaw flagged apps</h3>
-  <p class="hint">Takes away a flagged app's ability to interrupt — blocks
-    overlays, notifications and background starts, revokes accessibility and
-    notification access, drops battery exemption, and force-stops it — without
-    uninstalling it. Flagged = <b id="adv-n">0</b> app(s): the ones ticked,
-    caught popping up, or in the shared database.</p>
-  <div class="actions" style="justify-content:flex-start;margin:0">
-    <button id="adv-declaw" class="primary">Declaw flagged apps</button>
-  </div>
-  <p id="adv-declaw-result" class="hint" hidden></p>
-
-  <h3>Other things worth knowing</h3>
-  <details class="help">
-    <summary>Freeze vs uninstall, device admins, and manual steps</summary>
-    <div class="hint">
-      <p><b>Freeze instead of remove:</b> if you're not sure about an app,
-        freezing it (<code>pm disable-user</code>) stops it running but keeps
-        it, and it's undone with <code>pm enable</code>. Uninstalling a
-        pre-installed app for this user (<code>pm uninstall --user 0</code>)
-        survives reboots and can be restored with
-        <code>cmd package install-existing</code>.</p>
-      <p><b>Device admins:</b> an app registered as a device admin can't be
-        uninstalled until admin is removed. The “Open on phone” button above
-        tries to drop it, then opens the app's page on the handset so you can
-        turn admin off under Settings → Security → Device admin apps.</p>
-      <p><b>Has to be done on the phone itself:</b> browser site notifications
-        (Chrome / Samsung Internet), checking Play Protect is on, and Family
-        Link for a child's phone.</p>
-      <p><b>Brand quirks:</b> on Oppo/Realme/OnePlus turn on Developer options →
-        “Disable permission monitoring”, on Xiaomi enable USB debugging
-        (Security), and on Samsung turn Auto Blocker back on when you're done —
-        otherwise some of these commands are silently blocked.</p>
-    </div>
-  </details>
-
-  <div class="actions">
-    <button id="adv-close">Close</button>
-  </div>
-</dialog>
 
 <footer>
   <span id="dbcount"></span>

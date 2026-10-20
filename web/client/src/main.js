@@ -49,6 +49,7 @@ const state = {
   keepStopped: new Set(),  // pkgs to re-kill while connected
   guard: null,             // interval that re-stops kept apps
   runTimer: null,          // interval that refreshes the running list
+  view: "main",            // "main" or "adv" (full-page Advanced)
 };
 
 // ------------------------------------------------------------ platform
@@ -383,6 +384,7 @@ async function connect(device) {
                                             loadBad()]);
     state.apps = apps;
     state.home = home;
+    state.view = "main";
     renderApps();
     showStep("main");
     // Icons load in the background, appearing as each small batch lands.
@@ -746,6 +748,11 @@ function renderBar() {
   btn.disabled = n === 0 || state.busy;
   btn.textContent = n ? `Uninstall ${n} selected app${n > 1 ? "s" : ""}`
                       : "Tick apps to uninstall";
+  if (state.view === "adv") {               // full-page Advanced owns the screen
+    $("#bar").hidden = true;
+    $("#advanced").hidden = true;
+    return;
+  }
   $("#bar").hidden = !state.adb && n === 0;
   $("#done").hidden = !state.adb;
   $("#advanced").hidden = !state.adb;
@@ -927,10 +934,21 @@ async function declawFlagged() {
 }
 
 function openAdv() {
+  state.view = "adv";
   $("#adv-n").textContent = suspects().length;
   $("#adv-declaw-result").hidden = true;
-  $("#adv").showModal();
+  showStep("adv");
+  $("#bar").hidden = true;
+  $("#advanced").hidden = true;
+  window.scrollTo(0, 0);
   advReview();
+}
+
+function openBasic() {
+  state.view = "main";
+  showStep("main");
+  renderBar();
+  window.scrollTo(0, 0);
 }
 
 // ------------------------------------------------------------ start
@@ -975,7 +993,7 @@ function init() {
 
   $("#done").addEventListener("click", openHarden);
   $("#advanced").addEventListener("click", openAdv);
-  $("#adv-close").addEventListener("click", () => $("#adv").close());
+  $("#adv-back").addEventListener("click", openBasic);
   $("#adv-declaw").addEventListener("click", declawFlagged);
   $("#harden-cancel").addEventListener("click", () => $("#harden").close());
   $("#h-all").addEventListener("change", (e) => {

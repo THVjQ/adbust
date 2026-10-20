@@ -32,7 +32,11 @@ header {
 }
 .brand strong { font-size: 22px; color: var(--accent); margin-right: 10px; }
 .brand span { color: var(--muted); }
-.head-right { display: flex; align-items: center; gap: 14px; }
+.head-right { display: flex; align-items: center; gap: 14px; flex-wrap: nowrap; }
+.advtop { display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap; margin-bottom: 4px; }
+.advtop h1 { margin: 0; }
+section[data-step="adv"] > .hint { margin-top: 0; }
 .phone { color: var(--text); font-weight: 600; }
 
 main { max-width: 980px; margin: 0 auto; padding: 20px 16px; }
