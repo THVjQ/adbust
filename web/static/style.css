@@ -112,7 +112,6 @@ button.small { font-size: 13px; font-weight: 600; padding: 3px 10px;
 .opt { display: flex; align-items: center; gap: 8px; padding: 7px 4px; cursor: pointer; }
 .opt input { width: 18px; height: 18px; flex: none; accent-color: var(--accent); }
 .opt .hint { margin: 0; }
-#bar .big + .big { margin-left: 10px; }
 
 .tag, .kind {
   font-size: 12px; padding: 1px 8px; border-radius: 10px;
@@ -128,7 +127,7 @@ button.small { font-size: 13px; font-weight: 600; padding: 3px 10px;
 
 .bar {
   position: fixed; left: 0; right: 0; bottom: 0;
-  display: flex; justify-content: center; padding: 14px 16px;
+  display: flex; justify-content: center; gap: 16px; padding: 14px 16px;
   background: rgba(22, 41, 58, .94); border-top: 1px solid var(--line);
   backdrop-filter: blur(6px);
 }

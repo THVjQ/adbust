@@ -242,7 +242,8 @@ async function refreshRunning() {
     state.running = [...pkgs].map((p) => ({
       ...(state.apps.get(p) || { pkg: p, label: nameOf(p), system: false }),
       live: procs.has(p),
-    })).sort((a, b) => (a.label || a.pkg).localeCompare(b.label || b.pkg));
+    })).filter((a) => !a.system)   // user apps only
+      .sort((a, b) => (a.label || a.pkg).localeCompare(b.label || b.pkg));
   } catch (e) { console.warn("running list failed", e); }
   renderRunning();
 }
@@ -776,16 +777,6 @@ const HARDEN_OPS = {
 async function applyHarden(opts) {
   const sus = suspects();
   const out = [];
-  if (opts.includes("dns")) {
-    try {
-      await sh("settings put global private_dns_mode hostname");
-      await sh("settings put global private_dns_specifier dns.adguard-dns.com");
-      const got = (await sh("settings get global private_dns_specifier")).trim();
-      out.push(/adguard/.test(got)
-        ? "✓ Ad-blocking DNS turned on (AdGuard)"
-        : "⚠ DNS change didn't stick — this phone may block it");
-    } catch (e) { out.push("⚠ DNS: " + (e?.message || e)); }
-  }
   for (const key of Object.keys(HARDEN_OPS)) {
     if (!opts.includes(key)) continue;
     const { op, label } = HARDEN_OPS[key];
