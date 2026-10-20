@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+testapp/build/
+testapp/debug.keystore
+popup-triage*.txt
+*.db
