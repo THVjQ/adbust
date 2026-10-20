@@ -748,6 +748,7 @@ function renderBar() {
                       : "Tick apps to uninstall";
   $("#bar").hidden = !state.adb && n === 0;
   $("#done").hidden = !state.adb;
+  $("#advanced").hidden = !state.adb;
 }
 
 // ------------------------------------------------------------ hardening
@@ -804,6 +805,134 @@ function openHarden() {
   $("#harden").showModal();
 }
 
+// ------------------------------------------------------------ advanced
+
+// Strip one package's components out of a secure settings list (accessibility
+// services, notification listeners), the way the desktop tool does.
+async function revokeSecure(key, pkg) {
+  try {
+    const raw = (await sh(`settings get secure ${key}`)).trim();
+    const cur = (raw && raw !== "null") ? raw : "";
+    const kept = cur.split(":").filter((c) => c && !c.startsWith(pkg + "/"));
+    const next = kept.join(":");
+    if (next === cur) return;
+    if (next) await sh(`settings put secure ${key} ${next}`);
+    else await sh(`settings delete secure ${key}`);
+  } catch (e) { console.warn("revoke failed", e); }
+}
+
+async function advReview() {
+  const box = $("#adv-review");
+  box.replaceChildren(el("p", { className: "hint" }, "Reading…"));
+  const secList = async (key) => {
+    const raw = (await sh(`settings get secure ${key}`)).trim();
+    if (!raw || raw === "null") return [];
+    return [...new Set(raw.split(":").filter((c) => c.includes("/")))];
+  };
+  let acc = [], notif = [], admins = [], batt = [];
+  try {
+    acc = await secList("enabled_accessibility_services");
+    notif = await secList("enabled_notification_listeners");
+    const adOut = await sh("dumpsys device_policy");
+    const seen = new Set();
+    for (const m of adOut.matchAll(/ComponentInfo\{([A-Za-z][\w.]+)\/([\w.$]+)\}/g))
+      if (!seen.has(m[1])) { seen.add(m[1]); admins.push(`${m[1]}/${m[2]}`); }
+    const bOut = await sh("dumpsys deviceidle whitelist");
+    const bs = new Set();
+    for (const line of bOut.split("\n")) {
+      const m = line.match(/,([A-Za-z][\w.]+),/) ||
+                line.match(/^(?:system|user),\s*([A-Za-z][\w.]+)/);
+      if (m) bs.add(m[1]);
+    }
+    batt = [...bs];
+  } catch (e) {
+    box.replaceChildren(el("p", { className: "hint" },
+      "Couldn't read the phone: " + (e?.message || e)));
+    return;
+  }
+
+  const pkgOf = (c) => c.split("/")[0];
+  const row = (pkg, btn) => el("div", { className: "row" },
+    el("span", { className: "name" }, nameOf(pkg)),
+    el("span", { className: "pkg" }, pkg), btn);
+  const smallBtn = (text, danger, fn) => {
+    const b = el("button", { className: `small${danger ? " danger" : ""}`,
+                             type: "button" }, text);
+    b.addEventListener("click", async () => { b.disabled = true; await fn(); });
+    return b;
+  };
+  const kids = [];
+  const group = (title, items, mk) => {
+    kids.push(el("div", { className: "grouphead" }, `${title} (${items.length})`));
+    if (!items.length) kids.push(el("p", { className: "hint" }, "None."));
+    else for (const it of items) kids.push(mk(it));
+  };
+
+  group("Accessibility access", acc, (c) => row(pkgOf(c),
+    smallBtn("Revoke", true, async () => {
+      await revokeSecure("enabled_accessibility_services", pkgOf(c)); advReview();
+    })));
+  group("Notification access", notif, (c) => row(pkgOf(c),
+    smallBtn("Revoke", true, async () => {
+      await revokeSecure("enabled_notification_listeners", pkgOf(c)); advReview();
+    })));
+  group("Device admin", admins, (c) => row(pkgOf(c),
+    smallBtn("Open on phone", false, async () => {
+      try { await sh(`dpm remove-active-admin ${c}`); } catch {}
+      try {
+        await sh("am start -a android.settings.APPLICATION_DETAILS_SETTINGS " +
+                 `-d package:${pkgOf(c)}`);
+      } catch {}
+    })));
+  group("Battery unrestricted", batt, (pkg) => row(pkg,
+    smallBtn("Restrict", false, async () => {
+      try { await sh(`dumpsys deviceidle whitelist -${pkg}`); } catch {}
+      advReview();
+    })));
+  box.replaceChildren(...kids);
+}
+
+async function declawFlagged() {
+  const sus = suspects();
+  const res = $("#adv-declaw-result");
+  if (!sus.length) {
+    res.hidden = false;
+    res.textContent = "No flagged apps to declaw.";
+    return;
+  }
+  const btn = $("#adv-declaw");
+  btn.disabled = true;
+  btn.textContent = "Declawing…";
+  let ok = 0;
+  for (const pkg of sus) {
+    try {
+      await sh(`cmd appops set ${pkg} SYSTEM_ALERT_WINDOW deny`);
+      await sh(`cmd appops set ${pkg} POST_NOTIFICATION ignore`);
+      await sh(`cmd appops set ${pkg} RUN_IN_BACKGROUND ignore`);
+      await sh(`cmd appops set ${pkg} START_FOREGROUND deny`);
+      await revokeSecure("enabled_accessibility_services", pkg);
+      await revokeSecure("enabled_notification_listeners", pkg);
+      try { await sh(`dumpsys deviceidle whitelist -${pkg}`); } catch {}
+      await sh(`am force-stop ${pkg}`);
+      ok++;
+    } catch (e) { console.warn("declaw failed for", pkg, e); }
+  }
+  res.hidden = false;
+  res.textContent = `Declawed ${ok}/${sus.length} flagged app(s). They stay ` +
+    "installed but can't pop up, notify, or start in the background.";
+  btn.disabled = false;
+  btn.textContent = "Declaw flagged apps";
+  refreshRunning();
+  advReview();
+}
+
+function openAdv() {
+  $("#adv-n").textContent = suspects().length;
+  $("#adv-declaw-result").hidden = true;
+  $("#adv").showModal();
+  advReview();
+}
+
 // ------------------------------------------------------------ start
 
 function init() {
@@ -845,6 +974,9 @@ function init() {
   $("#sys").addEventListener("toggle", buildSys);
 
   $("#done").addEventListener("click", openHarden);
+  $("#advanced").addEventListener("click", openAdv);
+  $("#adv-close").addEventListener("click", () => $("#adv").close());
+  $("#adv-declaw").addEventListener("click", declawFlagged);
   $("#harden-cancel").addEventListener("click", () => $("#harden").close());
   $("#h-all").addEventListener("change", (e) => {
     for (const b of document.querySelectorAll("#harden .list input[type=checkbox]"))

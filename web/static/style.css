@@ -32,6 +32,7 @@ header {
 }
 .brand strong { font-size: 22px; color: var(--accent); margin-right: 10px; }
 .brand span { color: var(--muted); }
+.head-right { display: flex; align-items: center; gap: 14px; }
 .phone { color: var(--text); font-weight: 600; }
 
 main { max-width: 980px; margin: 0 auto; padding: 20px 16px; }
@@ -136,9 +137,14 @@ dialog {
   background: var(--panel); color: var(--text);
   border: 1px solid var(--bad); border-radius: 12px;
   width: min(640px, calc(100vw - 32px)); padding: 20px 22px;
+  max-height: 88vh; overflow: auto;
 }
 dialog::backdrop { background: rgba(5, 12, 20, .7); }
 dialog h2 { margin-top: 0; }
+dialog h3 { margin: 18px 0 4px; font-size: 15px; }
+dialog code { background: var(--raised); padding: 1px 5px; border-radius: 4px;
+  font-size: 12.5px; }
+#adv-review { max-height: 40vh; }
 dialog .list { max-height: 50vh; overflow: auto; margin-bottom: 16px; }
 .actions { display: flex; justify-content: flex-end; gap: 10px; }
 
