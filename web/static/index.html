@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>adbust</title>
+<meta name="description" content="Find and remove the app that keeps popping up ads on an Android phone, from your browser.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2324435C'/%3E%3Cpath d='M9 22 16 8l7 14M12 17h8' stroke='%2393C5E6' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="brand"><strong>adbust</strong><span>remove popup &amp; adware apps</span></div>
+  <div id="phone" class="phone"></div>
+</header>
+
+<main>
+  <section data-step="mac" class="card stop" hidden>
+    <h1>Mac is not supported</h1>
+    <p><strong>Do not use a Mac.</strong> adbust only works on a
+      <strong>Windows 10, Windows 11 or Linux</strong> PC. Move the phone to
+      one of those and open this page there in Chrome or Edge.</p>
+  </section>
+
+  <section data-step="mobile" class="card stop" hidden>
+    <h1>Open this on a PC</h1>
+    <p>Plug the phone into a <strong>Windows 10/11 or Linux</strong> PC with
+      a USB cable and open this page there in Chrome or Edge. Not on a Mac.</p>
+  </section>
+
+  <section data-step="browser" class="card stop" hidden>
+    <h1>Use Chrome or Edge</h1>
+    <p>This browser can't talk to USB devices. Open this page in
+      <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong> on
+      Windows 10/11 or Linux. Firefox and Safari can't do it, and Mac is not
+      supported.</p>
+  </section>
+
+  <section data-step="connect" class="card hero" hidden>
+    <h1>Plug in the phone</h1>
+    <ol class="steps">
+      <li>On the phone: <b>Settings → About phone → Software information</b>,
+        tap <b>Build number</b> 7 times.</li>
+      <li><b>Settings → Developer options → USB debugging</b> on.</li>
+      <li>Plug it into this <span id="platform">PC</span> PC with a USB cable,
+        then press the button and pick the phone.</li>
+    </ol>
+    <button id="connect" class="primary big">Connect phone</button>
+    <p class="hint">Only needed the first time. After that, plugging the phone
+      in is enough.</p>
+    <details class="help">
+      <summary>Phone not in the list?</summary>
+      <ul>
+        <li>Close anything else that talks to phones: adb, Android Studio,
+          scrcpy, Samsung Smart Switch. Only one program can hold the
+          connection. On Linux run <code>adb kill-server</code>.</li>
+        <li>Unlock the phone and set the USB mode to <b>File transfer</b>.</li>
+        <li>Try another cable. Charge-only cables don't carry data.</li>
+        <li>Windows: if it still never appears, a phone-maker USB driver may
+          own the connection. Removing that driver in Device Manager lets
+          Windows use its built-in one.</li>
+        <li>Linux: your user needs access to the USB device. Installing
+          <code>android-tools</code> (Fedora) or
+          <code>android-sdk-platform-tools-common</code> (Debian/Ubuntu)
+          adds the rules.</li>
+      </ul>
+    </details>
+  </section>
+
+  <div id="status" class="status" data-step="connect work main" hidden></div>
+
+  <section data-step="main" hidden>
+    <div class="card">
+      <h2>Apps that opened <span class="count" id="opened-count">0</span></h2>
+      <p class="hint">Leave the phone on the home screen and don't touch it.
+        Whatever opens by itself shows up here. Ads and apps drawing over the
+        screen are ticked for you. Apps you remove from this list are added to
+        the shared database so the next person finds them straight away.</p>
+      <p id="opened-empty" class="empty">Watching… nothing has opened yet.</p>
+      <div id="opened-list" class="list"></div>
+    </div>
+
+    <div class="card">
+      <h2>All apps</h2>
+      <details id="user" open>
+        <summary>User apps <span class="count" id="user-count">0</span></summary>
+        <div id="user-list" class="list"></div>
+      </details>
+      <details id="sys">
+        <summary>System apps <span class="count" id="sys-count">0</span>
+          <span class="hint">part of the phone, can't be uninstalled here</span></summary>
+        <div id="sys-list" class="list"></div>
+      </details>
+    </div>
+  </section>
+</main>
+
+<div id="bar" class="bar" hidden>
+  <button id="remove" class="danger big" disabled>Tick apps to uninstall</button>
+</div>
+
+<dialog id="known">
+  <h2 id="known-title">Apps removed by other people</h2>
+  <p class="hint">These were caught popping up on other phones and removed
+    there. Untick any you want to keep.</p>
+  <div id="known-list" class="list"></div>
+  <div class="actions">
+    <button id="known-no">Keep all</button>
+    <button id="known-yes" class="danger">Remove ticked</button>
+  </div>
+</dialog>
+
+<footer>
+  <span id="dbcount"></span>
+  <span>Works on Windows 10/11 and Linux in Chrome or Edge. <b>Not Mac.</b>
+    No app is installed on the phone. Only the names of removed popup apps are shared.</span>
+  <a href="https://github.com/THVjQ/adbust">source</a>
+</footer>
+<script type="module" src="app.js"></script>
+</body>
+</html>

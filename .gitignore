@@ -4,3 +4,9 @@ testapp/build/
 testapp/debug.keystore
 popup-triage*.txt
 *.db
+
+# web
+web/client/node_modules/
+web/data/
+web/helper/build/
+web/static/*.map
