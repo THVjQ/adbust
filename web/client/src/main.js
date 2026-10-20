@@ -45,6 +45,10 @@ const state = {
   picked: new Set(),
   busy: false,
   watcher: null,
+  running: [],             // apps running in the background right now
+  keepStopped: new Set(),  // pkgs to re-kill while connected
+  guard: null,             // interval that re-stops kept apps
+  runTimer: null,          // interval that refreshes the running list
 };
 
 // ------------------------------------------------------------ platform
@@ -192,6 +196,84 @@ function nameOf(pkg) {
   return state.apps.get(pkg)?.label || state.bad.get(pkg)?.label || pkg;
 }
 
+// ------------------------------------------------------------ running apps
+
+// Packages with a live process right now. `ps` names a process after its
+// package (plus an optional :suffix), so intersecting with the installed
+// list turns process names back into apps. Falls back to plain `ps`.
+async function readRunning() {
+  let out = "";
+  try { out = await sh("ps -A -o NAME"); } catch { /* try the plain form */ }
+  if (out.split("\n").length < 3) {
+    try { out = await sh("ps -A"); } catch { out = ""; }
+  }
+  const procs = new Set();
+  for (const raw of out.split("\n")) {
+    let name = raw.trim();
+    if (!name || name === "NAME") continue;
+    if (/\s/.test(name)) name = name.split(/\s+/).pop();  // plain ps: last column
+    name = name.split(":")[0];                            // drop :pushservice etc.
+    if (PKG_RE.test(name) && state.apps.has(name)) procs.add(name);
+  }
+  return procs;
+}
+
+async function refreshRunning() {
+  if (!state.adb) return;
+  try {
+    const procs = await readRunning();
+    // Show what's running now, plus anything we're keeping stopped so it can
+    // still be un-ticked even while it's successfully held down.
+    const pkgs = new Set([...procs, ...state.keepStopped]);
+    state.running = [...pkgs].map((p) => ({
+      ...(state.apps.get(p) || { pkg: p, label: nameOf(p), system: false }),
+      live: procs.has(p),
+    })).sort((a, b) => (a.label || a.pkg).localeCompare(b.label || b.pkg));
+  } catch (e) { console.warn("running list failed", e); }
+  renderRunning();
+}
+
+async function stopApp(pkg) {
+  try { await sh(`am force-stop ${pkg}`); }
+  catch (e) { console.warn("force-stop failed", e); }
+  await refreshRunning();
+}
+
+// Re-kill every kept package on a timer, but only while connected.
+let guardBusy = false;
+async function guardTick() {
+  if (guardBusy || !state.adb) return;
+  guardBusy = true;
+  try {
+    for (const pkg of state.keepStopped) {
+      try { await sh(`am force-stop ${pkg}`); } catch { /* keep going */ }
+    }
+  } finally { guardBusy = false; }
+}
+
+function ensureGuard() {
+  if (state.keepStopped.size && state.adb) {
+    if (!state.guard) state.guard = setInterval(guardTick, 2000);
+  } else if (state.guard) {
+    clearInterval(state.guard);
+    state.guard = null;
+  }
+  renderRunning();
+}
+
+function startRunning() {
+  refreshRunning();
+  if (state.runTimer) clearInterval(state.runTimer);
+  state.runTimer = setInterval(refreshRunning, 5000);
+}
+
+function stopRunning() {
+  if (state.guard) { clearInterval(state.guard); state.guard = null; }
+  if (state.runTimer) { clearInterval(state.runTimer); state.runTimer = null; }
+  state.keepStopped.clear();
+  state.running = [];
+}
+
 async function uninstall(pkg) {
   const app = state.apps.get(pkg);
   if (!app || app.system || !PKG_RE.test(pkg))
@@ -297,11 +379,13 @@ async function connect(device) {
     else status("No apps from the shared database. Watching for popups — " +
                 "leave the phone on the home screen.", "ok");
     startWatch();
+    startRunning();
     return true;
   } catch (e) {
     console.error(e);
     status(e?.message || String(e), "error");
     showStep("connect");
+    stopRunning();
     try { await state.adb?.close(); } catch {}
     state.adb = null;
     return false;
@@ -314,6 +398,8 @@ function onDisconnected() {
   if (!state.adb) return;
   state.adb = null;
   state.watcher = null;
+  stopRunning();
+  renderRunning();
   status("Phone unplugged. Plug it back in to carry on.", "error");
 }
 
@@ -603,6 +689,39 @@ function renderOpened() {
     sa.textContent = allSel ? "Clear selection" : "Select all";
   }
   renderBar();
+}
+
+function iconEl(a) {
+  return a.icon
+    ? el("img", { className: "ico", src: a.icon, alt: "", width: 22, height: 22 })
+    : el("span", { className: "ico ph" });
+}
+
+function renderRunning() {
+  const list = state.running;
+  $("#running-count").textContent = list.length;
+  $("#running-empty").hidden = list.length > 0;
+  $("#running-list").replaceChildren(...list.map((a) => {
+    const stop = el("button", { className: "small danger", type: "button" },
+                    a.live ? "Stop" : "Stopped");
+    stop.disabled = !a.live;
+    stop.addEventListener("click", (e) => { e.preventDefault(); stopApp(a.pkg); });
+
+    const box = el("input", { type: "checkbox",
+                              checked: state.keepStopped.has(a.pkg) });
+    box.addEventListener("change", () => {
+      box.checked ? state.keepStopped.add(a.pkg) : state.keepStopped.delete(a.pkg);
+      ensureGuard();
+    });
+    const keep = el("label", { className: "keep" }, box, "keep stopped");
+
+    const kids = [iconEl(a), el("span", { className: "name" }, a.label || a.pkg),
+      el("span", { className: "pkg" }, a.pkg)];
+    if (a.system) kids.push(el("span", { className: "tag sys" }, "system"));
+    if (!a.live) kids.push(el("span", { className: "run-state" }, "held stopped"));
+    kids.push(keep, stop);
+    return el("div", { className: `row${a.live ? "" : " dim"}` }, ...kids);
+  }));
 }
 
 function renderBar() {

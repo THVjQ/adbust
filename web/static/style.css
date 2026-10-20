@@ -102,6 +102,13 @@ details > summary {
 .grouphead:first-child { margin-top: 2px; }
 button.small { font-size: 13px; font-weight: 600; padding: 3px 10px;
   margin-left: 10px; vertical-align: middle; }
+.row .keep { display: flex; align-items: center; gap: 6px; font-size: 13px;
+  color: var(--muted); cursor: pointer; margin-left: auto; white-space: nowrap; }
+.row .keep input { width: 16px; height: 16px; accent-color: var(--accent); }
+.row .run-state { color: var(--muted); font-size: 12px; }
+.row.dim { opacity: .6; }
+.row button.small { margin-left: 0; }
+.row button.small.danger { background: var(--bad); color: #fff; border-color: var(--bad); }
 
 .tag, .kind {
   font-size: 12px; padding: 1px 8px; border-radius: 10px;

@@ -82,6 +82,15 @@
     </div>
 
     <div class="card">
+      <h2>Running now <span class="count" id="running-count">0</span></h2>
+      <p class="hint">Apps with a live process in the background. Press Stop to
+        shut one down, or tick “keep stopped” to shut it again every time it
+        restarts — this only runs while the phone stays connected here.</p>
+      <p id="running-empty" class="empty">Nothing is running in the background.</p>
+      <div id="running-list" class="list"></div>
+    </div>
+
+    <div class="card">
       <h2>All apps</h2>
       <details id="user" open>
         <summary>User apps <span class="count" id="user-count">0</span></summary>
