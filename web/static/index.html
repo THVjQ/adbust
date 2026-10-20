@@ -239,6 +239,32 @@
   </div>
 </dialog>
 
+<dialog id="cmdwarn">
+  <h2>Run this on the phone?</h2>
+  <p class="hint">About to run <code id="cmdwarn-cmd"></code> as an
+    <b>adb shell</b> command on the connected phone. It runs with the same
+    power adbust uses — a wrong command can disable apps, change settings or
+    delete data, and there's no undo. Only run commands you understand.</p>
+  <details class="help" open>
+    <summary>When and how to use this</summary>
+    <div class="hint">
+      <p><b>Use it for:</b> checking something the buttons don't cover, or
+        applying a one-off fix you've been given. The reply appears in the log.</p>
+      <p><b>Safe, read-only examples:</b>
+        <code>getprop ro.build.fingerprint</code>,
+        <code>dumpsys battery</code>, <code>pm list packages -3</code>,
+        <code>settings get secure enabled_accessibility_services</code>.</p>
+      <p><b>Be careful with</b> anything using <code>rm</code>,
+        <code>pm uninstall</code>, <code>pm clear</code>, <code>reboot</code>,
+        or <code>settings put</code> — these change or remove things for good.</p>
+    </div>
+  </details>
+  <div class="actions">
+    <button id="cmdwarn-cancel">Cancel</button>
+    <button id="cmdwarn-run" class="danger">Run command</button>
+  </div>
+</dialog>
+
 
 <footer>
   <span id="dbcount"></span>

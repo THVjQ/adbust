@@ -96,8 +96,17 @@ function showStep(name) {
 // ------------------------------------------------------------ adb helpers
 
 function logCmd(cmd, out, err) {
-  state.log.push({ t: Date.now(), cmd, out: (out || "").slice(0, 600), err: !!err });
-  if (state.log.length > 200) state.log.shift();
+  // One-line, trimmed reply so a huge dumpsys/base64 doesn't run away.
+  const o = (out || "").replace(/\s+/g, " ").trim().slice(0, 300);
+  const last = state.log[state.log.length - 1];
+  if (last && last.cmd === cmd && last.err === !!err) {
+    // Same command firing again (the 5s poll, the keep-stopped watchdog):
+    // collapse into the one entry with a counter instead of flooding.
+    last.out = o; last.t = Date.now(); last.n++;
+  } else {
+    state.log.push({ t: Date.now(), cmd, out: o, err: !!err, n: 1 });
+    if (state.log.length > 200) state.log.shift();
+  }
   if (state.view === "adv") renderLog();
 }
 
@@ -964,14 +973,29 @@ async function advDevice() {
   const g = async (p) => (await sh(`getprop ${p}`)).trim();
   try {
     add("Model", `${await g("ro.product.manufacturer")} ${await g("ro.product.model")}`.trim());
+    add("Marketing name", (await g("ro.product.vendor.marketname")) ||
+                          (await g("ro.config.marketing_name")) || "—");
     add("Android", `${await g("ro.build.version.release")} (API ${await g("ro.build.version.sdk")})`);
     add("Security patch", (await g("ro.build.version.security_patch")) || "—");
     add("Build", await g("ro.build.display.id"));
     add("Serial", state.device?.serial || "—");
+    add("Chipset", `${await g("ro.hardware")} · ${await g("ro.product.cpu.abi")}`);
+    const kern = (await sh("uname -r").catch(() => "")).trim() ||
+                 (await sh("cat /proc/sys/kernel/osrelease").catch(() => "")).trim();
+    if (kern) add("Kernel", kern);
+    const size = (await sh("wm size")).match(/Physical size:\s*(\S+)/);
+    const dens = (await sh("wm density")).match(/Physical density:\s*(\d+)/);
+    if (size) add("Screen", `${size[1]}${dens ? ` · ${dens[1]} dpi` : ""}`);
+    const crypto = (await g("ro.crypto.state"));
+    if (crypto) add("Encryption", crypto === "encrypted" ? "encrypted" : crypto);
+    const su = (await sh("which su || true")).trim();
+    add("Root (su)", su ? `present (${su})` : "not found");
     const bat = await sh("dumpsys battery");
     const lvl = (bat.match(/level:\s*(\d+)/) || [])[1];
     const temp = (bat.match(/temperature:\s*(\d+)/) || [])[1];
-    if (lvl) add("Battery", `${lvl}%${temp ? ` · ${(temp / 10).toFixed(1)}°C` : ""}`);
+    const plugged = /AC powered: true|USB powered: true/.test(bat);
+    if (lvl) add("Battery", `${lvl}%${temp ? ` · ${(temp / 10).toFixed(1)}°C` : ""}` +
+                            `${plugged ? " · charging" : ""}`);
     const df = (await sh("df /data")).trim().split("\n").pop().split(/\s+/);
     if (df.length >= 5) add("Storage /data", `${df[2]} used of ${df[1]} (${df[4]} full)`);
     const up = (await sh("cat /proc/uptime")).trim().split(" ")[0];
@@ -979,6 +1003,7 @@ async function advDevice() {
     const apps = [...state.apps.values()];
     add("Apps", `${apps.filter((a) => !a.system).length} user · ` +
                 `${apps.filter((a) => a.system).length} system`);
+    add("Running now", `${state.running.length} user app(s)`);
     box.replaceChildren(...rows);
   } catch (e) {
     box.replaceChildren(el("p", { className: "hint" },
@@ -991,21 +1016,31 @@ function renderLog() {
   if (!box) return;
   box.replaceChildren(...state.log.map((e) => {
     const line = el("div", { className: `logentry${e.err ? " err" : ""}` });
-    line.append(el("div", { className: "logcmd" }, "› " + e.cmd));
-    const out = e.out.trim();
-    if (out) line.append(el("div", { className: "logout" },
-      out.length > 500 ? out.slice(0, 500) + "…" : out));
+    const cmd = el("div", { className: "logcmd" }, "› " + e.cmd);
+    if (e.n > 1) cmd.append(el("span", { className: "logn" }, ` ×${e.n}`));
+    line.append(cmd);
+    if (e.out) line.append(el("div", { className: "logout" }, e.out));
     return line;
   }));
   box.scrollTop = box.scrollHeight;
 }
 
-async function runManual() {
-  const inp = $("#adv-cmd");
-  const cmd = inp.value.trim();
+let pendingCmd = "";
+
+function runManual() {
+  const cmd = $("#adv-cmd").value.trim();
   if (!cmd || !state.adb) return;
-  inp.value = "";
-  try { await sh(cmd); } catch { /* logCmd already recorded the error */ }
+  pendingCmd = cmd;
+  $("#cmdwarn-cmd").textContent = cmd;
+  $("#cmdwarn").showModal();
+}
+
+async function confirmManual() {
+  $("#cmdwarn").close();
+  if (!pendingCmd || !state.adb) return;
+  $("#adv-cmd").value = "";
+  try { await sh(pendingCmd); } catch { /* logCmd already recorded the error */ }
+  pendingCmd = "";
 }
 
 function openAdv() {
@@ -1077,6 +1112,8 @@ function init() {
     if (e.key === "Enter") runManual();
   });
   $("#adv-clear").addEventListener("click", () => { state.log = []; renderLog(); });
+  $("#cmdwarn-run").addEventListener("click", confirmManual);
+  $("#cmdwarn-cancel").addEventListener("click", () => $("#cmdwarn").close());
   $("#harden-cancel").addEventListener("click", () => $("#harden").close());
   $("#h-all").addEventListener("change", (e) => {
     for (const b of document.querySelectorAll("#harden .list input[type=checkbox]"))

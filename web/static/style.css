@@ -46,12 +46,14 @@ section[data-step="adv"] > .hint { margin-top: 0; }
   border: 1px solid var(--line); border-radius: 8px;
   background: var(--raised); color: var(--text);
   font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
-.log { max-height: 320px; overflow: auto; background: #0b141d;
+.log { height: 420px; max-height: 60vh; overflow: auto; background: #0b141d;
   border: 1px solid var(--line); border-radius: 8px; padding: 10px;
   font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
-.log:empty::before { content: "No commands yet."; color: var(--muted); }
+.log:empty::before { content: "No commands yet — actions you take show up here live.";
+  color: var(--muted); }
 .logentry { margin-bottom: 7px; }
 .logcmd { color: var(--accent); white-space: pre-wrap; word-break: break-all; }
+.logn { color: var(--muted); }
 .logout { color: var(--muted); white-space: pre-wrap; word-break: break-all; }
 .logentry.err .logout { color: var(--bad); }
 .phone { color: var(--text); font-weight: 600; }
