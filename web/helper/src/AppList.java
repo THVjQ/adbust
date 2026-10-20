@@ -58,7 +58,7 @@ public class AppList {
     //   pkg  base64png
     // one per line. Called as: app_process / AppList --icons pkg1 pkg2 ...
     static void printIcons(PackageManager pm, String[] args) {
-        final int size = 72;
+        final int size = 48;
         StringBuilder out = new StringBuilder();
         for (int i = 1; i < args.length; i++) {
             String pkg = args[i];

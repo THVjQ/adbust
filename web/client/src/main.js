@@ -151,15 +151,18 @@ async function readApps() {
 // Fetch launcher icons for the given packages and stash a data URL on each
 // app record. Done in chunks because each icon is a base64 PNG. Returns true
 // if any new icon was added, so the caller knows to re-render.
-async function loadIcons(pkgs) {
+async function loadIcons(pkgs, onProgress) {
   const want = [...new Set(pkgs)]
     .filter((p) => state.apps.get(p) && !state.apps.get(p).icon);
   if (!want.length) return false;
   let got = false;
   try {
     await pushHelper();
-    for (let i = 0; i < want.length; i += 40) {
-      const chunk = want.slice(i, i + 40);          // pkg names are [\w.]+, safe unquoted
+    // Small batches: each icon is a base64 PNG, and one huge shell reply is
+    // easy to truncate. Smaller replies also let icons show up as they land.
+    for (let i = 0; i < want.length; i += 6) {
+      const chunk = want.slice(i, i + 6);           // pkg names are [\w.]+, safe unquoted
+      let any = false;
       const out = await sh(`CLASSPATH=${HELPER} app_process / AppList --icons ` +
                            chunk.join(" "));
       for (const line of out.split("\n")) {
@@ -167,8 +170,9 @@ async function loadIcons(pkgs) {
         if (t < 0) continue;
         const pkg = line.slice(0, t), b64 = line.slice(t + 1).replace(/\r$/, "");
         const a = state.apps.get(pkg);
-        if (a && b64) { a.icon = "data:image/png;base64," + b64; got = true; }
+        if (a && b64) { a.icon = "data:image/png;base64," + b64; got = any = true; }
       }
+      if (any && onProgress) onProgress();
     }
     await sh(`rm -f ${HELPER}`);
   } catch (e) {
@@ -284,9 +288,9 @@ async function connect(device) {
     state.home = home;
     renderApps();
     showStep("main");
-    // Icons load in the background so they don't hold up the list.
+    // Icons load in the background, appearing as each small batch lands.
     loadIcons([...apps.values()].filter((a) => a.launcher || !a.system)
-      .map((a) => a.pkg)).then((ok) => { if (ok) { renderApps(); renderOpened(); } });
+      .map((a) => a.pkg), () => { renderApps(); renderOpened(); });
     const known = [...apps.values()]
       .filter((a) => !a.system && state.bad.has(a.pkg));
     if (known.length) askKnown(known);
@@ -507,7 +511,8 @@ function appRow(a, extra = []) {
   if (!a.launcher && !a.system) tags.push(el("span", { className: "tag" },
                                              "no icon"));
   const ico = a.icon
-    ? el("img", { className: "ico", src: a.icon, alt: "", loading: "lazy" })
+    ? el("img", { className: "ico", src: a.icon, alt: "", loading: "lazy",
+                  width: 22, height: 22 })
     : el("span", { className: "ico ph" });
   return el("label", { className: `row${a.system ? " locked" : ""}` }, box, ico,
     el("span", { className: "name" }, a.label || a.pkg),
@@ -585,10 +590,8 @@ function renderOpened() {
     .filter((p) => state.apps.get(p) && !state.apps.get(p).icon);
   if (missing.length && state.adb && !state.iconBusy) {
     state.iconBusy = true;
-    loadIcons(missing).then((ok) => {
-      state.iconBusy = false;
-      if (ok) { renderOpened(); renderApps(); }
-    });
+    loadIcons(missing, () => { renderOpened(); renderApps(); })
+      .finally(() => { state.iconBusy = false; });
   }
 
   // Select-all only applies to removable user apps that are still present.

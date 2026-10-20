@@ -92,7 +92,7 @@ details > summary {
 .row.locked { cursor: default; color: var(--muted); }
 .row.gone { opacity: .5; text-decoration: line-through; }
 .row input { width: 18px; height: 18px; accent-color: var(--bad); flex: none; }
-.row .ico { width: 26px; height: 26px; border-radius: 6px; flex: none; object-fit: cover; }
+.row .ico { width: 22px; height: 22px; border-radius: 5px; flex: none; object-fit: cover; }
 .row .ico.ph { background: var(--raised); border: 1px solid var(--line); }
 .row .name { font-weight: 600; }
 .row .pkg { color: var(--muted); font-size: 13px; word-break: break-all; flex: 1; min-width: 160px; }
