@@ -30,10 +30,27 @@
 
   <section data-step="browser" class="card stop" hidden>
     <h1>Use Chrome or Edge</h1>
-    <p>This browser can't talk to USB devices. Open this page in
-      <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong> on
-      Windows 10/11 or Linux. Firefox and Safari can't do it, and Mac is not
-      supported.</p>
+    <p>This browser can't talk to USB devices, so it can't reach the phone.
+      Open this page in <strong>Google Chrome</strong> or
+      <strong>Microsoft Edge</strong> on Windows 10/11 or Linux, plug the
+      phone in, and come back.</p>
+    <details class="help">
+      <summary>Why doesn't Firefox or Safari work?</summary>
+      <p class="hint">adbust connects to your phone straight from the web page
+        using a browser feature called <strong>WebUSB</strong>. It lets a
+        trusted page you open ask permission to talk to a USB device — here,
+        the phone's debugging connection — so adbust can list apps and remove
+        the bad ones without installing anything.</p>
+      <p class="hint">Only Chromium-based browsers support WebUSB: Chrome,
+        Edge, Brave and Opera. <strong>Firefox and Safari have chosen not to
+        add it</strong> on security grounds, so there's no way for a page to
+        reach USB in them — it isn't something adbust can switch on. Phones
+        and tablets can't be the controller either, and macOS blocks the
+        USB access this needs, so a Mac won't work even in Chrome.</p>
+      <p class="hint">If you're stuck on Firefox or a Mac, the desktop version
+        of adbust talks to the phone through the computer's own tools instead
+        of the browser, so the browser you use no longer matters.</p>
+    </details>
   </section>
 
   <section data-step="connect" class="card hero" hidden>
