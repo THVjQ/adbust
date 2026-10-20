@@ -198,22 +198,36 @@ function nameOf(pkg) {
 
 // ------------------------------------------------------------ running apps
 
-// Packages with a live process right now. `ps` names a process after its
-// package (plus an optional :suffix), so intersecting with the installed
-// list turns process names back into apps. Falls back to plain `ps`.
+// Packages with a live process right now. The activity manager knows the
+// full process name of each running app; `ps` only knows the kernel "comm"
+// name, which is truncated to 15 chars, so long package names (e.g. YouTube
+// Music) never matched. Parse ProcessRecord lines, fall back to ps with a
+// prefix match for the truncation.
 async function readRunning() {
-  let out = "";
-  try { out = await sh("ps -A -o NAME"); } catch { /* try the plain form */ }
-  if (out.split("\n").length < 3) {
-    try { out = await sh("ps -A"); } catch { out = ""; }
-  }
   const procs = new Set();
+  let out = "";
+  try { out = await sh("dumpsys activity processes"); } catch { /* fall back */ }
+  // ProcessRecord{hash pid:procname/uid}; procname is the full package.
+  const re = /ProcessRecord\{[0-9a-f]+ \d+:([A-Za-z0-9_.]+)[:/]/g;
+  let m;
+  while ((m = re.exec(out))) {
+    const name = m[1];
+    if (PKG_RE.test(name) && state.apps.has(name)) procs.add(name);
+  }
+  if (procs.size) return procs;
+
+  // Fallback: ps. comm is truncated, so match installed packages by prefix.
+  try { out = await sh("ps -A -o NAME"); } catch { out = ""; }
+  const installed = [...state.apps.keys()];
   for (const raw of out.split("\n")) {
     let name = raw.trim();
     if (!name || name === "NAME") continue;
-    if (/\s/.test(name)) name = name.split(/\s+/).pop();  // plain ps: last column
-    name = name.split(":")[0];                            // drop :pushservice etc.
-    if (PKG_RE.test(name) && state.apps.has(name)) procs.add(name);
+    name = name.split(":")[0];
+    if (state.apps.has(name)) { procs.add(name); continue; }
+    if (name.length >= 15) {                 // truncated comm — match by prefix
+      const hit = installed.find((p) => p.startsWith(name));
+      if (hit) procs.add(hit);
+    }
   }
   return procs;
 }
@@ -732,6 +746,71 @@ function renderBar() {
   btn.textContent = n ? `Uninstall ${n} selected app${n > 1 ? "s" : ""}`
                       : "Tick apps to uninstall";
   $("#bar").hidden = !state.adb && n === 0;
+  $("#done").hidden = !state.adb;
+}
+
+// ------------------------------------------------------------ hardening
+
+// Apps the per-app guards target: non-system apps that are ticked, were
+// caught popping up / drawing over the screen, or are in the shared database.
+function suspects() {
+  const s = new Set();
+  const add = (p) => {
+    const a = state.apps.get(p);
+    if (a && !a.system) s.add(p);
+  };
+  for (const p of state.picked) add(p);
+  for (const [p, o] of state.opened)
+    if (o.kind === "AD" || o.kind === "OVERLAY") add(p);
+  for (const p of state.bad.keys()) add(p);
+  return [...s];
+}
+
+const HARDEN_OPS = {
+  overlay:    { op: "SYSTEM_ALERT_WINDOW",      label: "Block pop-ups" },
+  install:    { op: "REQUEST_INSTALL_PACKAGES", label: "Block installing apps" },
+  fullscreen: { op: "USE_FULL_SCREEN_INTENT",   label: "Block full-screen ads" },
+  settings:   { op: "WRITE_SETTINGS",           label: "Block settings changes" },
+};
+
+async function applyHarden(opts) {
+  const sus = suspects();
+  const out = [];
+  if (opts.includes("dns")) {
+    try {
+      await sh("settings put global private_dns_mode hostname");
+      await sh("settings put global private_dns_specifier dns.adguard-dns.com");
+      const got = (await sh("settings get global private_dns_specifier")).trim();
+      out.push(/adguard/.test(got)
+        ? "✓ Ad-blocking DNS turned on (AdGuard)"
+        : "⚠ DNS change didn't stick — this phone may block it");
+    } catch (e) { out.push("⚠ DNS: " + (e?.message || e)); }
+  }
+  for (const key of Object.keys(HARDEN_OPS)) {
+    if (!opts.includes(key)) continue;
+    const { op, label } = HARDEN_OPS[key];
+    let ok = 0;
+    for (const pkg of sus) {
+      try {
+        await sh(`appops set ${pkg} ${op} deny`);
+        const got = await sh(`appops get ${pkg} ${op}`);
+        if (/deny|ignore/i.test(got)) ok++;
+      } catch { /* some phones reject some ops */ }
+    }
+    out.push(`${ok === sus.length ? "✓" : "⚠"} ` +
+             `${label}: ${ok}/${sus.length} app${sus.length === 1 ? "" : "s"}`);
+  }
+  return out;
+}
+
+function openHarden() {
+  $("#harden-n").textContent = suspects().length;
+  $("#harden-result").hidden = true;
+  for (const b of document.querySelectorAll("#harden input[type=checkbox]"))
+    b.checked = false;
+  $("#harden-apply").disabled = false;
+  $("#harden-apply").textContent = "Apply";
+  $("#harden").showModal();
 }
 
 // ------------------------------------------------------------ start
@@ -773,6 +852,32 @@ function init() {
            "screen.", "ok");
   });
   $("#sys").addEventListener("toggle", buildSys);
+
+  $("#done").addEventListener("click", openHarden);
+  $("#harden-cancel").addEventListener("click", () => $("#harden").close());
+  $("#h-all").addEventListener("change", (e) => {
+    for (const b of document.querySelectorAll("#harden .list input[type=checkbox]"))
+      b.checked = e.target.checked;
+  });
+  $("#harden-apply").addEventListener("click", async () => {
+    const opts = [...document.querySelectorAll("#harden .list input:checked")]
+      .map((b) => b.value);
+    const res = $("#harden-result");
+    if (!opts.length) {
+      res.hidden = false;
+      res.textContent = "Nothing ticked — pick at least one guard, or Cancel.";
+      return;
+    }
+    const btn = $("#harden-apply");
+    btn.disabled = true;
+    btn.textContent = "Applying…";
+    const lines = await applyHarden(opts);
+    res.hidden = false;
+    res.replaceChildren(...lines.flatMap((l) => [document.createTextNode(l), el("br")]));
+    btn.textContent = "Done";
+    btn.disabled = false;
+    refreshRunning();
+  });
 
   // After the first time, plugging the phone in is enough.
   navigator.usb.addEventListener("connect", () => setTimeout(autoConnect, 500));
