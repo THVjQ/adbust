@@ -207,9 +207,9 @@
 <dialog id="harden">
   <h2>Protect this phone</h2>
   <p class="hint">Turn on guards that make popup adware less likely to come
-    back. These apply to the <b id="harden-n">0</b> flagged app(s) — the ones
-    you ticked, ones caught popping up, and ones in the shared database. Every
-    one of these is reversible.</p>
+    back. The first four apply to the <b id="harden-n">0</b> flagged app(s) —
+    the ones you ticked, ones caught popping up, and ones in the shared
+    database. Everything is reversible except the Chrome wipe.</p>
   <label class="opt"><input type="checkbox" id="h-all"> <b>Select all</b></label>
   <div class="list">
     <label class="opt"><input type="checkbox" value="overlay">
@@ -220,6 +220,19 @@
       Stop flagged apps showing full-screen ads</label>
     <label class="opt"><input type="checkbox" value="settings">
       Stop flagged apps changing system settings</label>
+    <h3>Whole phone</h3>
+    <label class="opt"><input type="checkbox" value="adsoff">
+      Turn off personalised ads (YouTube &amp; Google)</label>
+    <label class="opt"><input type="checkbox" value="adid">
+      Delete the advertising ID</label>
+    <label class="opt"><input type="checkbox" value="chrome">
+      Wipe all Chrome data — history, cookies, cache, tabs and website
+      logins, all time</label>
+    <p class="hint warn-text"><b>Passwords:</b> wiping Chrome deletes any
+      passwords saved only on this phone. Passwords synced to the Google
+      account come back after signing back into Chrome. If unsure, check
+      Chrome → Settings → Google Password Manager first. Select all never
+      ticks this one.</p>
   </div>
   <p id="harden-result" class="hint" hidden></p>
   <div class="actions">

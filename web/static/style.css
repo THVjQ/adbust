@@ -169,6 +169,9 @@ dialog code { background: var(--raised); padding: 1px 5px; border-radius: 4px;
   font-size: 12.5px; }
 #adv-review { max-height: 40vh; }
 dialog .list { max-height: 50vh; overflow: auto; margin-bottom: 16px; }
+.warn-text { color: var(--warn); margin: 2px 0 6px 30px; }
+.adstep { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  margin: 4px 0; }
 .actions { display: flex; justify-content: flex-end; gap: 10px; }
 
 footer {

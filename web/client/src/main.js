@@ -824,7 +824,59 @@ async function applyHarden(opts) {
     out.push(`${ok === sus.length ? "✓" : "⚠"} ` +
              `${label}: ${ok}/${sus.length} app${sus.length === 1 ? "" : "s"}`);
   }
+  if (opts.includes("chrome")) {
+    let res;
+    try { res = await sh("pm clear com.android.chrome 2>&1"); }
+    catch (e) { res = String(e?.message || e); }
+    out.push(/Success/.test(res)
+      ? "✓ Chrome wiped. Opening it again starts fresh — sign back in to get " +
+        "synced passwords and bookmarks back."
+      : `⚠ Chrome wipe failed: ${res.trim().split("\n").pop() || "no reply"}`);
+  }
+  // Ad settings live in the Google account and Play services, not anywhere
+  // adb can write, so these open the right screen and say what to tap. One
+  // button each, because opening both at once would bury the first screen.
+  for (const key of Object.keys(AD_STEPS)) {
+    if (opts.includes(key)) out.push(adStepRow(AD_STEPS[key]));
+  }
   return out;
+}
+
+const AD_STEPS = {
+  adsoff: {
+    label: "Personalised ads",
+    tap: "on the phone, sign in if asked, then turn Personalised ads off",
+    cmds: ["am start -a android.intent.action.VIEW " +
+           "-d https://myadcenter.google.com/ 2>&1"],
+  },
+  adid: {
+    label: "Advertising ID",
+    tap: "on the phone, then tap Delete advertising ID and confirm",
+    cmds: ["am start -a com.google.android.gms.settings.ADS_PRIVACY 2>&1",
+           "am start -a android.settings.PRIVACY_SETTINGS 2>&1"],
+  },
+};
+
+function adStepRow({ label, tap, cmds }) {
+  const note = el("span", {}, ` — press Open, ${tap}.`);
+  const btn = el("button", { className: "small", textContent: "Open" });
+  btn.addEventListener("click", async () => {
+    for (const cmd of cmds) {
+      let res;
+      try { res = await sh(cmd); } catch { continue; }
+      if (!/Error|Exception/.test(res)) {
+        btn.textContent = "Open again";
+        if (cmd !== cmds[0])
+          note.textContent = " — opened Privacy settings instead. Tap Ads " +
+                             "(on Samsung: Other privacy settings → Ads), " +
+                             "then Delete advertising ID.";
+        return;
+      }
+    }
+    note.textContent = " — couldn't open it. On the phone go to Settings → " +
+                       "Google → Ads.";
+  });
+  return el("span", { className: "adstep" }, `• ${label} `, btn, note);
 }
 
 function openHarden() {
@@ -1116,7 +1168,9 @@ function init() {
   $("#cmdwarn-cancel").addEventListener("click", () => $("#cmdwarn").close());
   $("#harden-cancel").addEventListener("click", () => $("#harden").close());
   $("#h-all").addEventListener("change", (e) => {
-    for (const b of document.querySelectorAll("#harden .list input[type=checkbox]"))
+    // The Chrome wipe can't be undone, so it is never ticked for you.
+    for (const b of document.querySelectorAll(
+        "#harden .list input[type=checkbox]:not([value=chrome])"))
       b.checked = e.target.checked;
   });
   $("#harden-apply").addEventListener("click", async () => {
@@ -1133,7 +1187,8 @@ function init() {
     btn.textContent = "Applying…";
     const lines = await applyHarden(opts);
     res.hidden = false;
-    res.replaceChildren(...lines.flatMap((l) => [document.createTextNode(l), el("br")]));
+    res.replaceChildren(...lines.flatMap((l) =>
+      [typeof l === "string" ? document.createTextNode(l) : l, el("br")]));
     btn.textContent = "Done";
     btn.disabled = false;
     refreshRunning();
