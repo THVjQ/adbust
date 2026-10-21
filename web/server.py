@@ -15,8 +15,9 @@ import os
 import re
 import sqlite3
 import threading
+import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -46,6 +47,11 @@ MAX_PER_CLIENT_DAY = 200
 MAX_PER_IP_DAY = 600
 MAX_BODY = 64 * 1024
 
+# Usage events the page may send. No IPs are kept for these; the client id is
+# a random per-browser id, so "people" means "different browsers".
+USAGE_EVENTS = ("visit", "connect", "remove", "protect")
+MAX_USAGE_PER_CLIENT_DAY = 50
+
 
 def _now():
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
@@ -74,6 +80,12 @@ class Store:
                     PRIMARY KEY (pkg, client)
                 );
                 CREATE INDEX IF NOT EXISTS reports_at ON reports(at);
+                CREATE TABLE IF NOT EXISTS usage (
+                    event TEXT NOT NULL,
+                    client TEXT NOT NULL,
+                    at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS usage_at ON usage(at);
             """)
 
     def badapps(self):
@@ -94,6 +106,7 @@ class Store:
                 "category": "popup ads", "action": "uninstall",
                 "notes": "caught popping up and removed",
                 "added": r["first_seen"][:10], "last_seen": r["last_seen"][:10],
+                "added_at": r["first_seen"] + "Z",
                 "reports": r["reports"],
             } for r in rows],
         }
@@ -135,6 +148,48 @@ class Store:
                     by_client += 1
                     by_ip += 1
         return accepted
+
+    def track(self, event, client):
+        """Count one use of the site. Returns False if it was dropped."""
+        if event not in USAGE_EVENTS:
+            return False
+        day_ago = datetime.fromtimestamp(time.time() - 86400, timezone.utc) \
+            .strftime("%Y-%m-%d %H:%M:%S")
+        with self.lock, self.conn:
+            n = self.conn.execute(
+                "SELECT COUNT(*) FROM usage WHERE client=? AND at>?",
+                (client, day_ago)).fetchone()[0]
+            if n >= MAX_USAGE_PER_CLIENT_DAY:
+                return False
+            self.conn.execute("INSERT INTO usage (event,client,at) "
+                              "VALUES (?,?,?)", (event, client, _now()))
+        return True
+
+    def usage(self, days=7, tz=timezone.utc):
+        """Per-day totals for the last `days` days, newest first, with days
+        cut at midnight in `tz`. Each event: [times, different browsers]."""
+        start = (datetime.now(tz) - timedelta(days=days - 1)).replace(
+            hour=0, minute=0, second=0, microsecond=0)
+        since = start.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        with self.lock:
+            rows = self.conn.execute(
+                "SELECT event, client, at FROM usage WHERE at>=?",
+                (since,)).fetchall()
+            added = self.conn.execute(
+                "SELECT first_seen FROM apps WHERE first_seen>=?",
+                (since,)).fetchall()
+        out = {}
+        local = lambda at: datetime.strptime(at, "%Y-%m-%d %H:%M:%S") \
+            .replace(tzinfo=timezone.utc).astimezone(tz).strftime("%Y-%m-%d")
+        for r in rows:
+            d = out.setdefault(local(r["at"]), {})
+            d.setdefault(r["event"], []).append(r["client"])
+        for r in added:
+            out.setdefault(local(r["first_seen"]), {}) \
+                .setdefault("new_apps", []).append(None)
+        return {day: {ev: [len(cs), len(set(cs) - {None})]
+                      for ev, cs in evs.items()}
+                for day, evs in sorted(out.items(), reverse=True)}
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -180,7 +235,10 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
-        if self.path.split("?", 1)[0] != "/api/removed":
+        path = self.path.split("?", 1)[0]
+        if path == "/api/usage":
+            return self._usage()
+        if path != "/api/removed":
             return self._json({"error": "not found"}, HTTPStatus.NOT_FOUND)
         try:
             n = int(self.headers.get("Content-Length") or 0)
@@ -198,8 +256,46 @@ class Handler(SimpleHTTPRequestHandler):
         accepted = self.store.report(items, client, self._ip())
         return self._json({"accepted": accepted})
 
+    def _usage(self):
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            if n <= 0 or n > 1024:
+                raise ValueError("bad length")
+            doc = json.loads(self.rfile.read(n))
+            client = str(doc.get("client") or "")
+            if not CLIENT_RE.match(client):
+                raise ValueError("bad body")
+        except (ValueError, json.JSONDecodeError, AttributeError):
+            return self._json({"error": "bad request"},
+                              HTTPStatus.BAD_REQUEST)
+        return self._json({"ok": self.store.track(str(doc.get("event")),
+                                                  client)})
+
+
+def print_usage(days):
+    """`server.py --usage [days]`: the usage table, days in Sydney time.
+    Run it on the host as the apps user — the image has no tz database:
+      sudo -u apps ADBUST_DATA=/mnt/Pool1-MAIN/apps/adbust-web/data \\
+        python3 /mnt/Pool1-MAIN/apps/adbust-web/src/server.py --usage"""
+    try:
+        from zoneinfo import ZoneInfo
+        tz = ZoneInfo(os.environ.get("ADBUST_TZ", "Australia/Sydney"))
+    except Exception:
+        tz = timezone.utc
+    rep = Store(DATA / "adbust-web.db").usage(days, tz)
+    cols = USAGE_EVENTS + ("new_apps",)
+    print(f"{'day':<12}" + "".join(f"{c:>14}" for c in cols)
+          + f"   (times/browsers, {tz})")
+    for day, evs in rep.items():
+        cells = ["%d/%d" % tuple(evs[c]) if c in evs else "-"
+                 for c in USAGE_EVENTS]
+        cells.append(str(evs["new_apps"][0]) if "new_apps" in evs else "-")
+        print(f"{day:<12}" + "".join(f"{c:>14}" for c in cells))
+
 
 def main():
+    if sys.argv[1:2] == ["--usage"]:
+        return print_usage(int(sys.argv[2]) if sys.argv[2:] else 7)
     Handler.store = Store(DATA / "adbust-web.db")
     Handler.extensions_map = {**Handler.extensions_map,
                               ".js": "text/javascript",

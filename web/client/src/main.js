@@ -359,6 +359,24 @@ async function report(items) {
   } catch (e) {
     console.warn("report failed", e);
   }
+  track("remove");
+}
+
+// Count one use of the site (visit, connect, remove, protect). Counts only,
+// never what's on the phone; the server keeps no IP for these.
+function track(event) {
+  fetch("api/usage", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ client: clientId(), event }),
+  }).catch(() => {});
+}
+
+// "added 20 Oct" from the database's UTC timestamp, in the viewer's time.
+function addedOn(b) {
+  const d = new Date(b.added_at || b.added);
+  return isNaN(d) ? "" : "added " + d.toLocaleDateString([],
+    { day: "numeric", month: "short", year: "numeric" });
 }
 
 // ------------------------------------------------------------ connect
@@ -412,6 +430,7 @@ async function connect(device) {
     state.view = "main";
     renderApps();
     showStep("main");
+    track("connect");
     // Icons load in the background, appearing as each small batch lands.
     loadIcons([...apps.values()].filter((a) => a.launcher || !a.system)
       .map((a) => a.pkg), () => { renderApps(); renderOpened(); });
@@ -468,7 +487,8 @@ function askKnown(known) {
       el("span", { className: "name" }, nameOf(a.pkg)),
       el("span", { className: "pkg" }, a.pkg),
       el("span", { className: "tag bad" },
-         `removed by ${b.reports} ${b.reports === 1 ? "person" : "people"}`)));
+         `removed by ${b.reports} ${b.reports === 1 ? "person" : "people"}`),
+      el("span", { className: "tag" }, addedOn(b))));
   }
   $("#known-title").textContent = `${known.length} app${known.length > 1 ?
     "s" : ""} on this phone ${known.length > 1 ? "were" : "was"} removed ` +
@@ -634,7 +654,7 @@ function appRow(a, extra = []) {
   });
   const tags = [];
   if (a.system) tags.push(el("span", { className: "tag sys" }, "system"));
-  if (bad) tags.push(el("span", { className: "tag bad" },
+  if (bad) tags.push(el("span", { className: "tag bad", title: addedOn(bad) },
                         `removed by ${bad.reports}`));
   if (!a.launcher && !a.system) tags.push(el("span", { className: "tag" },
                                              "no icon"));
@@ -1118,6 +1138,7 @@ function openBasic() {
 // ------------------------------------------------------------ start
 
 function init() {
+  track("visit");
   const p = platform();
   $("#platform").textContent = { windows: "Windows", linux: "Linux",
                                  mac: "Mac", mobile: "phone",
@@ -1186,6 +1207,7 @@ function init() {
     btn.disabled = true;
     btn.textContent = "Applying…";
     const lines = await applyHarden(opts);
+    track("protect");
     res.hidden = false;
     res.replaceChildren(...lines.flatMap((l) =>
       [typeof l === "string" ? document.createTextNode(l) : l, el("br")]));

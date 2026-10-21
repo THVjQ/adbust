@@ -45,6 +45,28 @@ class Store(unittest.TestCase):
                                        "1.2.3.4"), 0)
         self.assertEqual(len(self.s.badapps()["apps"]), 200)
 
+    def test_apps_are_date_stamped(self):
+        self.s.report([{"pkg": TEST}], "client-aaaa", "1.2.3.4")
+        a = self.s.badapps()["apps"][0]
+        self.assertRegex(a["added_at"], r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\dZ$")
+        self.assertEqual(a["added"], a["added_at"][:10])
+
+    def test_usage_counts_times_and_browsers(self):
+        for c in ("client-aaaa", "client-aaaa", "client-bbbb"):
+            self.assertTrue(self.s.track("visit", c))
+        self.s.track("connect", "client-aaaa")
+        self.s.report([{"pkg": TEST}], "client-aaaa", "1.2.3.4")
+        (day, evs), = self.s.usage(1).items()
+        self.assertEqual(evs["visit"], [3, 2])
+        self.assertEqual(evs["connect"], [1, 1])
+        self.assertEqual(evs["new_apps"][0], 1)
+
+    def test_usage_refuses_junk_and_floods(self):
+        self.assertFalse(self.s.track("drop table", "client-aaaa"))
+        for _ in range(server.MAX_USAGE_PER_CLIENT_DAY):
+            self.s.track("visit", "client-aaaa")
+        self.assertFalse(self.s.track("visit", "client-aaaa"))
+
     def test_desktop_adbust_can_read_it(self):
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
         import adbust
