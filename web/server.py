@@ -103,6 +103,7 @@ class Store:
                 SELECT a.pkg, a.label, a.first_seen, a.last_seen,
                        COUNT(r.client) AS reports
                 FROM apps a JOIN reports r ON r.pkg = a.pkg
+                WHERE a.pkg NOT IN (SELECT pkg FROM good)
                 GROUP BY a.pkg ORDER BY reports DESC, a.pkg
             """).fetchall()
         return {
@@ -140,8 +141,7 @@ class Store:
                         pkg.startswith(PROTECTED_PREFIXES):
                     continue
                 label = str(it.get("label") or "")[:120]
-                how = it.get("how") if it.get("how") in ("popup", "sorted") \
-                    else "database"
+                how = "popup" if it.get("how") == "popup" else "database"
                 cur = self.conn.execute(
                     "INSERT OR IGNORE INTO reports (pkg,client,ip,how,at) "
                     "VALUES (?,?,?,?,?)", (pkg, client, ip, how, now))
@@ -158,19 +158,27 @@ class Store:
         return accepted
 
     def goodapps(self):
-        """Apps someone sorted as good. The sorter hides these, so the next
-        person only goes through apps nobody has vouched for yet."""
+        """Database apps someone sorted as good. They drop out of badapps(),
+        so no phone gets them flagged or pre-ticked for removal any more."""
         with self.lock:
             rows = self.conn.execute("""
-                SELECT pkg, MAX(label) AS label, MIN(at) AS added,
-                       COUNT(*) AS votes
-                FROM good GROUP BY pkg ORDER BY pkg
+                SELECT g.pkg, COALESCE(a.label, MAX(g.label)) AS label,
+                       a.first_seen, MIN(g.at) AS marked,
+                       (SELECT COUNT(*) FROM reports r WHERE r.pkg = g.pkg)
+                         AS reports
+                FROM good g LEFT JOIN apps a ON a.pkg = g.pkg
+                GROUP BY g.pkg ORDER BY g.pkg
             """).fetchall()
-        return {"apps": [{"pkg": r["pkg"], "label": r["label"],
-                          "added_at": r["added"] + "Z", "votes": r["votes"]}
-                         for r in rows]}
+        return {"apps": [{
+            "pkg": r["pkg"], "label": r["label"] or "", "reports": r["reports"],
+            "added_at": (r["first_seen"] or r["marked"]) + "Z",
+            "good_at": r["marked"] + "Z",
+        } for r in rows]}
 
     def mark_good(self, items, client):
+        """{"pkg", "good": true} marks an app good; "good": false puts it
+        back on the bad list (clearing every good mark, not just this
+        browser's)."""
         day_ago = datetime.fromtimestamp(time.time() - 86400, timezone.utc) \
             .strftime("%Y-%m-%d %H:%M:%S")
         now = _now()
@@ -180,18 +188,21 @@ class Store:
                 "SELECT COUNT(*) FROM good WHERE client=? AND at>?",
                 (client, day_ago)).fetchone()[0]
             for it in items:
-                if n >= MAX_PER_CLIENT_DAY:
-                    break
                 pkg = str(it.get("pkg") or "")
                 if not PKG_RE.match(pkg) or len(pkg) > 200:
                     continue
-                cur = self.conn.execute(
-                    "INSERT OR IGNORE INTO good (pkg,client,label,at) "
-                    "VALUES (?,?,?,?)",
-                    (pkg, client, str(it.get("label") or "")[:120], now))
-                if cur.rowcount:
-                    accepted += 1
-                    n += 1
+                if it.get("good") is False:
+                    cur = self.conn.execute("DELETE FROM good WHERE pkg=?",
+                                            (pkg,))
+                else:
+                    if n >= MAX_PER_CLIENT_DAY:
+                        continue
+                    cur = self.conn.execute(
+                        "INSERT OR IGNORE INTO good (pkg,client,label,at) "
+                        "VALUES (?,?,?,?)",
+                        (pkg, client, str(it.get("label") or "")[:120], now))
+                    n += cur.rowcount
+                accepted += 1 if cur.rowcount else 0
         return accepted
 
     def track(self, event, client):

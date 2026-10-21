@@ -6,7 +6,7 @@
 <title>adbust</title>
 <meta name="description" content="Find and remove the app that keeps popping up ads on an Android phone, from your browser.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2324435C'/%3E%3Cpath d='M9 22 16 8l7 14M12 17h8' stroke='%2393C5E6' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 <header>
@@ -196,30 +196,28 @@
         </div>
       </details>
     </div>
-
-    <!-- Hidden: Ctrl+Shift+E shows it. -->
-    <div class="card" id="sorter" hidden>
-      <h2>Sort apps <span class="count" id="sort-n">0</span></h2>
-      <p class="hint">Go through the apps on this phone and tick the ones that
-        are <b>good</b>. Everything left unticked is <b>bad</b>: saving sends it
-        to the shared database, so it is ticked for removal on the next phone
-        that has it. Good apps are remembered too and won't be shown here on
-        other phones. System apps aren't listed. Nothing is removed from this
-        phone.</p>
-      <div class="sortbar">
-        <input id="sort-find" class="grow" type="search" placeholder="Filter by name or package">
-        <button id="sort-allgood" class="small">Tick all good</button>
-        <button id="sort-nonegood" class="small">Untick all</button>
-        <label class="opt"><input type="checkbox" id="sort-showgood">
-          Show <span id="sort-goodn">0</span> already sorted good</label>
-      </div>
-      <div id="sort-list" class="list"></div>
-      <div class="sortbar">
-        <span id="sort-result" class="hint grow"></span>
-        <button id="sort-save" class="danger">Save</button>
-      </div>
-    </div>
   </section>
+
+  <!-- Hidden: Ctrl+Shift+E shows it. Outside the steps so it works with no
+       phone connected; with Advanced open it sits at the bottom of it. -->
+  <div class="card" id="sorter" hidden>
+    <h2>Sort the shared database <span class="count" id="sort-n">0</span></h2>
+    <p class="hint">Every app here was caught popping up on someone's phone, so
+      it is <b>bad</b>: flagged and ticked for removal on any phone that has
+      it. Tick the ones that are actually <b>good</b> and Save. Good apps leave
+      the bad list: no phone gets them flagged, shown as "removed by", or
+      ticked any more. Untick one later to put it back.</p>
+    <div class="sortbar">
+      <input id="sort-find" class="grow" type="search" placeholder="Filter by name or package">
+      <label class="opt"><input type="checkbox" id="sort-showgood">
+        Show <span id="sort-goodn">0</span> already marked good</label>
+    </div>
+    <div id="sort-list" class="list"></div>
+    <div class="sortbar">
+      <span id="sort-result" class="hint grow"></span>
+      <button id="sort-save" class="primary">Save</button>
+    </div>
+  </div>
 </main>
 
 <div id="bar" class="bar" hidden>

@@ -42,7 +42,7 @@ const state = {
   home: "",
   bad: new Map(),    // pkg -> shared database entry
   good: new Map(),   // pkg -> entry in the shared "sorted good" list
-  sortGood: new Set(), // pkgs ticked good in the sorter, not yet saved
+  sortMark: new Map(), // pkg -> good? : unsaved ticks in the sorter
   opened: new Map(), // pkg -> {pkg,kind,activity,first,last,count}
   picked: new Set(),
   busy: false,
@@ -913,9 +913,9 @@ function openHarden() {
 
 // ------------------------------------------------------------ sorter
 
-// Hidden behind Ctrl+Shift+E. Every app starts unticked, i.e. bad; you tick
-// the good ones. Saving sends both halves to the server, so the next phone
-// gets the bad ones pre-ticked for removal and never sees the good ones here.
+// Hidden behind Ctrl+Shift+E. Goes through the shared database, not the
+// phone: every entry is bad until someone ticks it good. Good apps leave the
+// bad list on the server, so no phone flags or pre-ticks them any more.
 
 async function loadGood() {
   try {
@@ -926,110 +926,96 @@ async function loadGood() {
   }
 }
 
-function sortable() {
-  return [...state.apps.values()].filter((a) => !a.system)
-    .sort((x, y) => (x.label || x.pkg).localeCompare(y.label || y.pkg));
+// Ticked = good. Unsaved changes override what the server says.
+const isGood = (pkg) => state.sortMark.has(pkg) ? state.sortMark.get(pkg)
+                                                : state.good.has(pkg);
+
+function sortEntries() {
+  const showGood = $("#sort-showgood").checked;
+  const all = [...state.bad.values()];
+  if (showGood) all.push(...state.good.values());
+  return all.sort((x, y) => (x.label || x.pkg).localeCompare(y.label || y.pkg));
 }
 
 function renderSorter() {
   const q = $("#sort-find").value.trim().toLowerCase();
-  const showGood = $("#sort-showgood").checked;
-  const all = sortable();
-  const todo = all.filter((a) => showGood || !state.good.has(a.pkg));
-  const shown = todo.filter((a) => !q ||
+  const shown = sortEntries().filter((a) => !q ||
     (a.label || "").toLowerCase().includes(q) || a.pkg.includes(q));
-  $("#sort-n").textContent = todo.length;
-  $("#sort-goodn").textContent = all.filter((a) => state.good.has(a.pkg)).length;
+  $("#sort-n").textContent = state.bad.size;
+  $("#sort-goodn").textContent = state.good.size;
   const list = $("#sort-list");
   const top = list.scrollTop;  // ticking re-renders; don't jump to the top
   list.replaceChildren(...(shown.length ? shown.map(sortRow)
-    : [el("p", { className: "hint" }, todo.length ? "Nothing matches."
-        : "Every app on this phone has already been sorted good.")]));
+    : [el("p", { className: "hint" }, q ? "Nothing matches."
+        : "The shared database is empty.")]));
   list.scrollTop = top;
-  const good = todo.filter((a) => state.sortGood.has(a.pkg)).length;
-  const btn = $("#sort-save");
-  btn.dataset.armed = "";
-  btn.disabled = !todo.length;
-  btn.textContent = `Save — ${good} good, ${todo.length - good} bad`;
+  const n = state.sortMark.size;
+  $("#sort-save").disabled = !n;
+  $("#sort-save").textContent = n ? `Save ${n} change${n === 1 ? "" : "s"}`
+                                  : "Save";
 }
 
 function sortRow(a) {
-  const good = state.sortGood.has(a.pkg);
+  const good = isGood(a.pkg);
   const box = el("input", { type: "checkbox", checked: good });
+  const app = state.apps.get(a.pkg);
   const row = el("label", { className: `row${good ? " good" : ""}` }, box,
-    iconEl(a), el("span", { className: "name" }, a.label || a.pkg),
-    el("span", { className: "pkg" }, a.pkg));
-  const bad = state.bad.get(a.pkg);
-  if (bad) row.append(el("span", { className: "tag bad", title: addedOn(bad) },
-                         "in bad list"));
-  const g = state.good.get(a.pkg);
-  if (g) row.append(el("span", { className: "tag" }, "sorted good"));
-  if (a.installer) row.append(el("span", { className: "tag" },
-                                 a.installer === "com.android.vending"
-                                   ? "Play Store" : a.installer));
+    app ? iconEl(app) : el("span", { className: "ico ph" }),
+    el("span", { className: "name" }, a.label || a.pkg),
+    el("span", { className: "pkg" }, a.pkg),
+    el("span", { className: "tag" },
+       `removed by ${a.reports} ${a.reports === 1 ? "person" : "people"}`),
+    el("span", { className: "tag" }, addedOn(a)));
+  if (app) row.append(el("span", { className: "tag bad" }, "on this phone"));
+  row.append(el("a", { className: "tag", target: "_blank", rel: "noopener",
+                       href: "https://play.google.com/store/apps/details?id=" +
+                             encodeURIComponent(a.pkg) }, "Play Store ↗"));
   box.addEventListener("change", () => {
-    box.checked ? state.sortGood.add(a.pkg) : state.sortGood.delete(a.pkg);
+    if (box.checked === state.good.has(a.pkg)) state.sortMark.delete(a.pkg);
+    else state.sortMark.set(a.pkg, box.checked);
     renderSorter();
   });
   return row;
 }
 
-async function postApps(path, items) {
-  let accepted = 0;
-  for (let i = 0; i < items.length; i += 100) {
-    const res = await fetch(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ client: clientId(), apps: items.slice(i, i + 100) }),
-    });
-    accepted += (await res.json()).accepted || 0;
-  }
-  return accepted;
-}
-
 async function saveSort() {
   const btn = $("#sort-save");
-  const todo = sortable().filter((a) =>
-    $("#sort-showgood").checked || !state.good.has(a.pkg));
-  const item = (a, how) => ({ pkg: a.pkg, label: a.label || "", how });
-  const good = todo.filter((a) => state.sortGood.has(a.pkg)).map((a) => item(a));
-  const bad = todo.filter((a) => !state.sortGood.has(a.pkg))
-    .map((a) => item(a, "sorted"));
-  // Bad entries get pre-ticked for removal on other people's phones, so
-  // make the second click the one that sends them.
-  if (bad.length && !btn.dataset.armed) {
-    btn.dataset.armed = "1";
-    btn.textContent = `Click again to send ${bad.length} as bad`;
-    return;
-  }
+  const items = [...state.sortMark].map(([pkg, good]) =>
+    ({ pkg, good, label: state.bad.get(pkg)?.label || "" }));
   btn.disabled = true;
   btn.textContent = "Saving…";
+  let accepted = 0;
   try {
-    const g = await postApps("api/good", good);
-    const b = await postApps("api/removed", bad);
+    for (let i = 0; i < items.length; i += 100) {
+      const res = await fetch("api/good", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ client: clientId(),
+                               apps: items.slice(i, i + 100) }),
+      });
+      accepted += (await res.json()).accepted || 0;
+    }
     track("sort");
-    $("#sort-result").textContent = `Saved ${g} good and ${b} bad.` +
-      (g < good.length || b < bad.length
-        ? " Some were already saved, or hit the daily limit." : "");
-  } catch (e) {
+    const good = items.filter((x) => x.good).length;
+    $("#sort-result").textContent = `Saved: ${good} marked good, ` +
+      `${items.length - good} back on the bad list.` +
+      (accepted < items.length ? " Some hit the daily limit." : "");
+  } catch {
     $("#sort-result").textContent = "Couldn't reach the shared database.";
   }
-  state.sortGood.clear();
+  state.sortMark.clear();
   await Promise.all([loadGood(), loadBad()]);
   renderSorter();
+  if (state.adb) renderApps();
 }
 
 async function toggleSorter() {
-  if (!state.adb) {
-    status("Connect a phone first.", "ask");
-    return;
-  }
-  if (state.view !== "adv") openAdv();
   const card = $("#sorter");
   card.hidden = !card.hidden;
   if (card.hidden) return;
   $("#sort-result").textContent = "";
-  await loadGood();
+  state.sortMark.clear();
+  await Promise.all([loadGood(), loadBad()]);
   renderSorter();
   card.scrollIntoView({ behavior: "smooth" });
 }
@@ -1319,14 +1305,6 @@ function init() {
   $("#sort-find").addEventListener("input", renderSorter);
   $("#sort-showgood").addEventListener("change", renderSorter);
   $("#sort-save").addEventListener("click", saveSort);
-  $("#sort-allgood").addEventListener("click", () => {
-    for (const a of sortable()) state.sortGood.add(a.pkg);
-    renderSorter();
-  });
-  $("#sort-nonegood").addEventListener("click", () => {
-    state.sortGood.clear();
-    renderSorter();
-  });
   $("#cmdwarn-run").addEventListener("click", confirmManual);
   $("#cmdwarn-cancel").addEventListener("click", () => $("#cmdwarn").close());
   $("#harden-cancel").addEventListener("click", () => $("#harden").close());

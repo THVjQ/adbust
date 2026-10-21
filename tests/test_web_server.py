@@ -67,17 +67,21 @@ class Store(unittest.TestCase):
             self.s.track("visit", "client-aaaa")
         self.assertFalse(self.s.track("visit", "client-aaaa"))
 
-    def test_sorted_good_and_bad(self):
-        n = self.s.mark_good([{"pkg": "com.whatsapp", "label": "WhatsApp"},
-                              {"pkg": "not a pkg"}], "client-aaaa")
+    def test_good_apps_leave_the_bad_list(self):
+        self.s.report([{"pkg": TEST, "label": "PDF"}], "client-aaaa", "ip")
+        self.s.report([{"pkg": "com.spam.other"}], "client-aaaa", "ip")
+        n = self.s.mark_good([{"pkg": TEST, "good": True},
+                              {"pkg": "not a pkg"}], "client-bbbb")
         self.assertEqual(n, 1)
-        self.s.mark_good([{"pkg": "com.whatsapp"}], "client-bbbb")
+        bad = [a["pkg"] for a in self.s.badapps()["apps"]]
+        self.assertEqual(bad, ["com.spam.other"])
         g = self.s.goodapps()["apps"]
-        self.assertEqual((g[0]["pkg"], g[0]["votes"]), ("com.whatsapp", 2))
-        self.s.report([{"pkg": TEST, "how": "sorted"}], "client-aaaa", "ip")
-        self.assertEqual(self.s.badapps()["apps"][0]["pkg"], TEST)
-        how = self.s.conn.execute("SELECT how FROM reports").fetchone()[0]
-        self.assertEqual(how, "sorted")
+        self.assertEqual((g[0]["pkg"], g[0]["label"], g[0]["reports"]),
+                         (TEST, "PDF", 1))
+        # Un-marking puts it straight back on the bad list.
+        self.s.mark_good([{"pkg": TEST, "good": False}], "client-cccc")
+        self.assertEqual(len(self.s.badapps()["apps"]), 2)
+        self.assertEqual(self.s.goodapps()["apps"], [])
 
     def test_desktop_adbust_can_read_it(self):
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
