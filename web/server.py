@@ -255,7 +255,7 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path.startswith("/api/"):
             self.send_header("Cache-Control", "no-store")
             self.send_header("Access-Control-Allow-Origin", "*")
-        elif self.path.endswith((".js", ".html", "/")):
+        elif self.path.split("?", 1)[0].endswith((".js", ".css", ".html", "/")):
             self.send_header("Cache-Control", "no-cache")
         super().end_headers()
 
