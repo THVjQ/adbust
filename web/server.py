@@ -49,7 +49,7 @@ MAX_BODY = 64 * 1024
 
 # Usage events the page may send. No IPs are kept for these; the client id is
 # a random per-browser id, so "people" means "different browsers".
-USAGE_EVENTS = ("visit", "connect", "remove", "protect")
+USAGE_EVENTS = ("visit", "connect", "remove", "protect", "sort")
 MAX_USAGE_PER_CLIENT_DAY = 50
 
 
@@ -86,6 +86,13 @@ class Store:
                     at TEXT NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS usage_at ON usage(at);
+                CREATE TABLE IF NOT EXISTS good (
+                    pkg TEXT NOT NULL,
+                    client TEXT NOT NULL,
+                    label TEXT NOT NULL DEFAULT '',
+                    at TEXT NOT NULL,
+                    PRIMARY KEY (pkg, client)
+                );
             """)
 
     def badapps(self):
@@ -133,7 +140,8 @@ class Store:
                         pkg.startswith(PROTECTED_PREFIXES):
                     continue
                 label = str(it.get("label") or "")[:120]
-                how = "popup" if it.get("how") == "popup" else "database"
+                how = it.get("how") if it.get("how") in ("popup", "sorted") \
+                    else "database"
                 cur = self.conn.execute(
                     "INSERT OR IGNORE INTO reports (pkg,client,ip,how,at) "
                     "VALUES (?,?,?,?,?)", (pkg, client, ip, how, now))
@@ -147,6 +155,43 @@ class Store:
                     accepted += 1
                     by_client += 1
                     by_ip += 1
+        return accepted
+
+    def goodapps(self):
+        """Apps someone sorted as good. The sorter hides these, so the next
+        person only goes through apps nobody has vouched for yet."""
+        with self.lock:
+            rows = self.conn.execute("""
+                SELECT pkg, MAX(label) AS label, MIN(at) AS added,
+                       COUNT(*) AS votes
+                FROM good GROUP BY pkg ORDER BY pkg
+            """).fetchall()
+        return {"apps": [{"pkg": r["pkg"], "label": r["label"],
+                          "added_at": r["added"] + "Z", "votes": r["votes"]}
+                         for r in rows]}
+
+    def mark_good(self, items, client):
+        day_ago = datetime.fromtimestamp(time.time() - 86400, timezone.utc) \
+            .strftime("%Y-%m-%d %H:%M:%S")
+        now = _now()
+        accepted = 0
+        with self.lock, self.conn:
+            n = self.conn.execute(
+                "SELECT COUNT(*) FROM good WHERE client=? AND at>?",
+                (client, day_ago)).fetchone()[0]
+            for it in items:
+                if n >= MAX_PER_CLIENT_DAY:
+                    break
+                pkg = str(it.get("pkg") or "")
+                if not PKG_RE.match(pkg) or len(pkg) > 200:
+                    continue
+                cur = self.conn.execute(
+                    "INSERT OR IGNORE INTO good (pkg,client,label,at) "
+                    "VALUES (?,?,?,?)",
+                    (pkg, client, str(it.get("label") or "")[:120], now))
+                if cur.rowcount:
+                    accepted += 1
+                    n += 1
         return accepted
 
     def track(self, event, client):
@@ -230,6 +275,8 @@ class Handler(SimpleHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if path in ("/api/badapps", "/badapps.json"):
             return self._json(self.store.badapps())
+        if path == "/api/goodapps":
+            return self._json(self.store.goodapps())
         if path == "/api/health":
             return self._json({"ok": True})
         return super().do_GET()
@@ -238,7 +285,7 @@ class Handler(SimpleHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if path == "/api/usage":
             return self._usage()
-        if path != "/api/removed":
+        if path not in ("/api/removed", "/api/good"):
             return self._json({"error": "not found"}, HTTPStatus.NOT_FOUND)
         try:
             n = int(self.headers.get("Content-Length") or 0)
@@ -253,6 +300,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json({"error": "bad request"},
                               HTTPStatus.BAD_REQUEST)
         items = [i for i in items[:100] if isinstance(i, dict)]
+        if path == "/api/good":
+            return self._json({"accepted": self.store.mark_good(items, client)})
         accepted = self.store.report(items, client, self._ip())
         return self._json({"accepted": accepted})
 

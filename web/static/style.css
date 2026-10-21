@@ -167,7 +167,18 @@ dialog h2 { margin-top: 0; }
 dialog h3 { margin: 18px 0 4px; font-size: 15px; }
 dialog code { background: var(--raised); padding: 1px 5px; border-radius: 4px;
   font-size: 12.5px; }
-#adv-review { max-height: 40vh; }
+/* Scroll inside the box; without overflow the rows spill over the cards below. */
+#adv-review, #sort-list { max-height: 40vh; overflow: auto; }
+#adv-review > *, #sort-list > * { flex: none; }
+.sortbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 8px 0; }
+.sortbar .grow { flex: 1; min-width: 160px; }
+#sort-find { font: inherit; font-size: 14px; padding: 7px 10px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--raised); color: var(--text); }
+#sort-list .row input { accent-color: var(--ok); }
+#sort-list .row.good .name { color: var(--ok); }
+#sort-list .row:not(.good) .name { color: var(--bad); }
 dialog .list { max-height: 50vh; overflow: auto; margin-bottom: 16px; }
 .warn-text { color: var(--warn); margin: 2px 0 6px 30px; }
 .adstep { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap;

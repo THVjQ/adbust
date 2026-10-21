@@ -67,6 +67,18 @@ class Store(unittest.TestCase):
             self.s.track("visit", "client-aaaa")
         self.assertFalse(self.s.track("visit", "client-aaaa"))
 
+    def test_sorted_good_and_bad(self):
+        n = self.s.mark_good([{"pkg": "com.whatsapp", "label": "WhatsApp"},
+                              {"pkg": "not a pkg"}], "client-aaaa")
+        self.assertEqual(n, 1)
+        self.s.mark_good([{"pkg": "com.whatsapp"}], "client-bbbb")
+        g = self.s.goodapps()["apps"]
+        self.assertEqual((g[0]["pkg"], g[0]["votes"]), ("com.whatsapp", 2))
+        self.s.report([{"pkg": TEST, "how": "sorted"}], "client-aaaa", "ip")
+        self.assertEqual(self.s.badapps()["apps"][0]["pkg"], TEST)
+        how = self.s.conn.execute("SELECT how FROM reports").fetchone()[0]
+        self.assertEqual(how, "sorted")
+
     def test_desktop_adbust_can_read_it(self):
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
         import adbust

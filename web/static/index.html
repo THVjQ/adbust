@@ -196,6 +196,29 @@
         </div>
       </details>
     </div>
+
+    <!-- Hidden: Ctrl+Shift+E shows it. -->
+    <div class="card" id="sorter" hidden>
+      <h2>Sort apps <span class="count" id="sort-n">0</span></h2>
+      <p class="hint">Go through the apps on this phone and tick the ones that
+        are <b>good</b>. Everything left unticked is <b>bad</b>: saving sends it
+        to the shared database, so it is ticked for removal on the next phone
+        that has it. Good apps are remembered too and won't be shown here on
+        other phones. System apps aren't listed. Nothing is removed from this
+        phone.</p>
+      <div class="sortbar">
+        <input id="sort-find" class="grow" type="search" placeholder="Filter by name or package">
+        <button id="sort-allgood" class="small">Tick all good</button>
+        <button id="sort-nonegood" class="small">Untick all</button>
+        <label class="opt"><input type="checkbox" id="sort-showgood">
+          Show <span id="sort-goodn">0</span> already sorted good</label>
+      </div>
+      <div id="sort-list" class="list"></div>
+      <div class="sortbar">
+        <span id="sort-result" class="hint grow"></span>
+        <button id="sort-save" class="danger">Save</button>
+      </div>
+    </div>
   </section>
 </main>
 

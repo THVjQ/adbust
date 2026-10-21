@@ -41,6 +41,8 @@ const state = {
   apps: new Map(),   // pkg -> {pkg,label,system,enabled,launcher,installer,installed}
   home: "",
   bad: new Map(),    // pkg -> shared database entry
+  good: new Map(),   // pkg -> entry in the shared "sorted good" list
+  sortGood: new Set(), // pkgs ticked good in the sorter, not yet saved
   opened: new Map(), // pkg -> {pkg,kind,activity,first,last,count}
   picked: new Set(),
   busy: false,
@@ -909,6 +911,129 @@ function openHarden() {
   $("#harden").showModal();
 }
 
+// ------------------------------------------------------------ sorter
+
+// Hidden behind Ctrl+Shift+E. Every app starts unticked, i.e. bad; you tick
+// the good ones. Saving sends both halves to the server, so the next phone
+// gets the bad ones pre-ticked for removal and never sees the good ones here.
+
+async function loadGood() {
+  try {
+    const doc = await (await fetch("api/goodapps", { cache: "no-store" })).json();
+    state.good = new Map(doc.apps.map((a) => [a.pkg, a]));
+  } catch {
+    state.good = new Map();
+  }
+}
+
+function sortable() {
+  return [...state.apps.values()].filter((a) => !a.system)
+    .sort((x, y) => (x.label || x.pkg).localeCompare(y.label || y.pkg));
+}
+
+function renderSorter() {
+  const q = $("#sort-find").value.trim().toLowerCase();
+  const showGood = $("#sort-showgood").checked;
+  const all = sortable();
+  const todo = all.filter((a) => showGood || !state.good.has(a.pkg));
+  const shown = todo.filter((a) => !q ||
+    (a.label || "").toLowerCase().includes(q) || a.pkg.includes(q));
+  $("#sort-n").textContent = todo.length;
+  $("#sort-goodn").textContent = all.filter((a) => state.good.has(a.pkg)).length;
+  const list = $("#sort-list");
+  const top = list.scrollTop;  // ticking re-renders; don't jump to the top
+  list.replaceChildren(...(shown.length ? shown.map(sortRow)
+    : [el("p", { className: "hint" }, todo.length ? "Nothing matches."
+        : "Every app on this phone has already been sorted good.")]));
+  list.scrollTop = top;
+  const good = todo.filter((a) => state.sortGood.has(a.pkg)).length;
+  const btn = $("#sort-save");
+  btn.dataset.armed = "";
+  btn.disabled = !todo.length;
+  btn.textContent = `Save — ${good} good, ${todo.length - good} bad`;
+}
+
+function sortRow(a) {
+  const good = state.sortGood.has(a.pkg);
+  const box = el("input", { type: "checkbox", checked: good });
+  const row = el("label", { className: `row${good ? " good" : ""}` }, box,
+    iconEl(a), el("span", { className: "name" }, a.label || a.pkg),
+    el("span", { className: "pkg" }, a.pkg));
+  const bad = state.bad.get(a.pkg);
+  if (bad) row.append(el("span", { className: "tag bad", title: addedOn(bad) },
+                         "in bad list"));
+  const g = state.good.get(a.pkg);
+  if (g) row.append(el("span", { className: "tag" }, "sorted good"));
+  if (a.installer) row.append(el("span", { className: "tag" },
+                                 a.installer === "com.android.vending"
+                                   ? "Play Store" : a.installer));
+  box.addEventListener("change", () => {
+    box.checked ? state.sortGood.add(a.pkg) : state.sortGood.delete(a.pkg);
+    renderSorter();
+  });
+  return row;
+}
+
+async function postApps(path, items) {
+  let accepted = 0;
+  for (let i = 0; i < items.length; i += 100) {
+    const res = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ client: clientId(), apps: items.slice(i, i + 100) }),
+    });
+    accepted += (await res.json()).accepted || 0;
+  }
+  return accepted;
+}
+
+async function saveSort() {
+  const btn = $("#sort-save");
+  const todo = sortable().filter((a) =>
+    $("#sort-showgood").checked || !state.good.has(a.pkg));
+  const item = (a, how) => ({ pkg: a.pkg, label: a.label || "", how });
+  const good = todo.filter((a) => state.sortGood.has(a.pkg)).map((a) => item(a));
+  const bad = todo.filter((a) => !state.sortGood.has(a.pkg))
+    .map((a) => item(a, "sorted"));
+  // Bad entries get pre-ticked for removal on other people's phones, so
+  // make the second click the one that sends them.
+  if (bad.length && !btn.dataset.armed) {
+    btn.dataset.armed = "1";
+    btn.textContent = `Click again to send ${bad.length} as bad`;
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = "Saving…";
+  try {
+    const g = await postApps("api/good", good);
+    const b = await postApps("api/removed", bad);
+    track("sort");
+    $("#sort-result").textContent = `Saved ${g} good and ${b} bad.` +
+      (g < good.length || b < bad.length
+        ? " Some were already saved, or hit the daily limit." : "");
+  } catch (e) {
+    $("#sort-result").textContent = "Couldn't reach the shared database.";
+  }
+  state.sortGood.clear();
+  await Promise.all([loadGood(), loadBad()]);
+  renderSorter();
+}
+
+async function toggleSorter() {
+  if (!state.adb) {
+    status("Connect a phone first.", "ask");
+    return;
+  }
+  if (state.view !== "adv") openAdv();
+  const card = $("#sorter");
+  card.hidden = !card.hidden;
+  if (card.hidden) return;
+  $("#sort-result").textContent = "";
+  await loadGood();
+  renderSorter();
+  card.scrollIntoView({ behavior: "smooth" });
+}
+
 // ------------------------------------------------------------ advanced
 
 // Strip one package's components out of a secure settings list (accessibility
@@ -1185,6 +1310,23 @@ function init() {
     if (e.key === "Enter") runManual();
   });
   $("#adv-clear").addEventListener("click", () => { state.log = []; renderLog(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey && e.shiftKey && e.code === "KeyE") {
+      e.preventDefault();
+      toggleSorter();
+    }
+  });
+  $("#sort-find").addEventListener("input", renderSorter);
+  $("#sort-showgood").addEventListener("change", renderSorter);
+  $("#sort-save").addEventListener("click", saveSort);
+  $("#sort-allgood").addEventListener("click", () => {
+    for (const a of sortable()) state.sortGood.add(a.pkg);
+    renderSorter();
+  });
+  $("#sort-nonegood").addEventListener("click", () => {
+    state.sortGood.clear();
+    renderSorter();
+  });
   $("#cmdwarn-run").addEventListener("click", confirmManual);
   $("#cmdwarn-cancel").addEventListener("click", () => $("#cmdwarn").close());
   $("#harden-cancel").addEventListener("click", () => $("#harden").close());
