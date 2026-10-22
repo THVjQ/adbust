@@ -1,8 +1,8 @@
 # adbust web
 
-The website version: plug a phone into a **Windows 10/11 or Linux** PC, open
-the site in **Chrome or Edge**, and clean it. **Mac is not supported**, and the
-page says so in red.
+The website version: plug a phone into a **Windows, Mac or Linux** computer, open
+the site in **Chrome or Edge**, and clean it. Safari
+and Firefox have no WebUSB, so on a Mac it has to be Chrome or Edge.
 
 1. **Connect phone.** You only press it the first time. After that, plugging the phone in is enough.
 2. Every app is read with its real name and split into **user apps** and

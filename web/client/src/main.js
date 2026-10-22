@@ -418,8 +418,8 @@ async function connect(device) {
       if (e instanceof AdbDaemonWebUsbDevice.DeviceBusyError ||
           /claim|busy|access/i.test(String(e?.message))) {
         throw new Error("Another program is using the phone's USB " +
-          "connection. Close adb, Android Studio, scrcpy or Smart Switch, " +
-          "unplug the phone and plug it back in.");
+          "connection. Close adb, Android Studio, scrcpy, Smart Switch or " +
+          "Android File Transfer, unplug the phone and plug it back in.");
       }
       throw e;
     }
@@ -1292,10 +1292,8 @@ function openBasic() {
 function init() {
   track("visit");
   const p = platform();
-  $("#platform").textContent = { windows: "Windows", linux: "Linux",
-                                 mac: "Mac", mobile: "phone",
-                                 other: "" }[p];
-  if (p === "mac") return showStep("mac");
+  $("#platform").textContent = { windows: "Windows PC", linux: "Linux PC",
+                                 mac: "Mac" }[p] || "computer";
   if (p === "mobile") return showStep("mobile");
   if (!manager || !window.isSecureContext) return showStep("browser");
   showStep("connect");

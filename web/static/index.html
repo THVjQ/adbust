@@ -18,24 +18,17 @@
 </header>
 
 <main>
-  <section data-step="mac" class="card stop" hidden>
-    <h1>Mac is not supported</h1>
-    <p><strong>Do not use a Mac.</strong> adbust only works on a
-      <strong>Windows 10, Windows 11 or Linux</strong> PC. Move the phone to
-      one of those and open this page there in Chrome or Edge.</p>
-  </section>
-
   <section data-step="mobile" class="card stop" hidden>
     <h1>Open this on a PC</h1>
-    <p>Plug the phone into a <strong>Windows 10/11 or Linux</strong> PC with
-      a USB cable and open this page there in Chrome or Edge. Not on a Mac.</p>
+    <p>Plug the phone into a <strong>Windows, Mac or Linux</strong> computer
+      with a USB cable and open this page there in Chrome or Edge.</p>
   </section>
 
   <section data-step="browser" class="card stop" hidden>
     <h1>Use Chrome or Edge</h1>
     <p>This browser can't talk to USB devices, so it can't reach the phone.
       Open this page in <strong>Google Chrome</strong> or
-      <strong>Microsoft Edge</strong> on Windows 10/11 or Linux, plug the
+      <strong>Microsoft Edge</strong> on Windows, Mac or Linux, plug the
       phone in, and come back.</p>
     <details class="help">
       <summary>Why doesn't Firefox or Safari work?</summary>
@@ -47,10 +40,10 @@
       <p class="hint">Only Chromium-based browsers support WebUSB: Chrome,
         Edge, Brave and Opera. <strong>Firefox and Safari have chosen not to
         add it</strong> on security grounds, so there's no way for a page to
-        reach USB in them — it isn't something adbust can switch on. Phones
-        and tablets can't be the controller either, and macOS blocks the
-        USB access this needs, so a Mac won't work even in Chrome.</p>
-      <p class="hint">If you're stuck on Firefox or a Mac, the desktop version
+        reach USB in them — it isn't something adbust can switch on. On a
+        Mac that means Chrome or Edge, not Safari. Phones and tablets can't
+        be the controller either.</p>
+      <p class="hint">If you're stuck on Firefox or Safari, the desktop version
         of adbust talks to the phone through the computer's own tools instead
         of the browser, so the browser you use no longer matters.</p>
     </details>
@@ -62,7 +55,7 @@
       <li>On the phone: <b>Settings → About phone → Software information</b>,
         tap <b>Build number</b> 7 times.</li>
       <li><b>Settings → Developer options → USB debugging</b> on.</li>
-      <li>Plug it into this <span id="platform">PC</span> PC with a USB cable,
+      <li>Plug it into this <span id="platform">computer</span> with a USB cable,
         then press the button and pick the phone.</li>
     </ol>
     <button id="connect" class="primary big">Connect phone</button>
@@ -73,12 +66,15 @@
       <ul>
         <li>Close anything else that talks to phones: adb, Android Studio,
           scrcpy, Samsung Smart Switch. Only one program can hold the
-          connection. On Linux run <code>adb kill-server</code>.</li>
+          connection. If adb is installed, run <code>adb kill-server</code>.</li>
         <li>Unlock the phone and set the USB mode to <b>File transfer</b>.</li>
         <li>Try another cable. Charge-only cables don't carry data.</li>
         <li>Windows: if it still never appears, a phone-maker USB driver may
           own the connection. Removing that driver in Device Manager lets
           Windows use its built-in one.</li>
+        <li>Mac: quit <b>Android File Transfer</b> and <b>OpenMTP</b> (check
+          the menu bar too) — they grab the phone the moment it's plugged in.
+          A USB-C hub can also get in the way; try the Mac's own port.</li>
         <li>Linux: your user needs access to the USB device. Installing
           <code>android-tools</code> (Fedora) or
           <code>android-sdk-platform-tools-common</code> (Debian/Ubuntu)
@@ -303,7 +299,7 @@
 
 <footer>
   <span id="dbcount"></span>
-  <span>Works on Windows 10/11 and Linux in Chrome or Edge. <b>Not Mac.</b>
+  <span>Works on Windows, Mac and Linux in Chrome or Edge.
     No app is installed on the phone. Only the names of apps you remove are shared.</span>
   <a href="https://github.com/THVjQ/adbust">source</a>
 </footer>

@@ -19,7 +19,7 @@ Tested on a real Samsung Galaxy S21 FE (Android 16) as well as the fake
 handset in `tests/`.
 
 **Website version:** [`web/`](web/README.md) does the same from Chrome or Edge on
-Windows 10/11 or Linux (not Mac). There's nothing to install, and its shared database
+Windows, Mac or Linux. There's nothing to install, and its shared database
 grows from everyone's removals.
 
 ![Apps tab](docs/apps.png)
