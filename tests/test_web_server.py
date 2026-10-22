@@ -83,6 +83,12 @@ class Store(unittest.TestCase):
         self.assertEqual(len(self.s.badapps()["apps"]), 2)
         self.assertEqual(self.s.goodapps()["apps"], [])
 
+    def test_manual_removals_are_listed(self):
+        self.s.report([{"pkg": TEST, "how": "manual"}], "client-aaaa", "ip")
+        self.assertEqual(self.s.badapps()["apps"][0]["pkg"], TEST)
+        how = self.s.conn.execute("SELECT how FROM reports").fetchone()[0]
+        self.assertEqual(how, "manual")
+
     def test_desktop_adbust_can_read_it(self):
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
         import adbust

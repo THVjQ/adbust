@@ -12,8 +12,10 @@ page says so in red.
 4. **Apps that opened** fills in live. Ads (AD) and apps drawing over the
    screen are ticked automatically. *Uninstall selected* removes everything
    ticked in one go. System apps can't be ticked.
-5. Apps removed from that list, or from the prompt, go into the shared
-   database for the next person.
+5. Every app removed with the uninstall button — ticked by hand, caught
+   popping up, or from the prompt — goes into the shared database for the
+   next person. Ones that aren't adware are marked good in the hidden
+   sorter (Ctrl+Shift+E), which takes them off the list.
 
 ## How it works
 
@@ -35,8 +37,9 @@ Guard rails on the shared list:
 - Core system packages (`android`, `com.android.*`, `com.samsung.android.*`,
   …) are always refused.
 - Each browser can report 200 apps a day, and each IP 600.
-- Apps removed from the plain "All apps" list are never reported. Only
-  popups caught by the watch and apps matched from the database are.
+- Every removal is reported, with `how` = `popup`, `manual` or `database`.
+  Apps marked good in the sorter (`POST /api/good`) are left out of
+  `/api/badapps` whatever their reports say.
 
 App names come from `helper/`, a ~4 KB dex run with `app_process`. It is
 copied to `/data/local/tmp`, run once, and deleted. Nothing is installed on

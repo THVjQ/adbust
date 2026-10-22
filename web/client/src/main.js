@@ -614,8 +614,8 @@ async function removeMany(pkgs, how) {
     status(`Removing ${i + 1} of ${pkgs.length}: ${nameOf(pkg)}…`);
     const r = await uninstall(pkg).catch((e) => ({ ok: false, msg: e.message }));
     if (r.ok) {
-      // Only apps caught opening by themselves, or already in the shared
-      // database, are reported. Tidying up other apps stays private.
+      // Every removal is reported. Ones that weren't real adware get
+      // marked good in the sorter (Ctrl+Shift+E), which drops them off.
       removed.push({ pkg, label: nameOf(pkg),
                      how: state.opened.has(pkg) ? "popup" : how });
       state.apps.delete(pkg);
@@ -626,8 +626,8 @@ async function removeMany(pkgs, how) {
       failed.push(`${nameOf(pkg)} ${r.msg}`);
     }
   }
-  // Popup culprits and database hits go back into the shared database.
-  await report(removed.filter((r) => r.how !== "manual"));
+  // Everything removed goes into the shared database.
+  await report(removed);
   await loadBad();
   state.busy = false;
   renderApps();

@@ -141,7 +141,8 @@ class Store:
                         pkg.startswith(PROTECTED_PREFIXES):
                     continue
                 label = str(it.get("label") or "")[:120]
-                how = "popup" if it.get("how") == "popup" else "database"
+                how = it.get("how") if it.get("how") in ("popup", "manual") \
+                    else "database"
                 cur = self.conn.execute(
                     "INSERT OR IGNORE INTO reports (pkg,client,ip,how,at) "
                     "VALUES (?,?,?,?,?)", (pkg, client, ip, how, now))
