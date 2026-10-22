@@ -30,17 +30,21 @@
       Open this page in <strong>Google Chrome</strong> or
       <strong>Microsoft Edge</strong> on Windows, Mac or Linux, plug the
       phone in, and come back.</p>
+    <p id="brave-note" hidden><strong>You're using Brave.</strong> Brave
+      switches off the USB access this page needs, and turning Shields off
+      doesn't bring it back. Use Chrome or Edge for this.</p>
     <details class="help">
-      <summary>Why doesn't Firefox or Safari work?</summary>
+      <summary>Why doesn't Firefox, Safari or Brave work?</summary>
       <p class="hint">adbust connects to your phone straight from the web page
         using a browser feature called <strong>WebUSB</strong>. It lets a
         trusted page you open ask permission to talk to a USB device — here,
         the phone's debugging connection — so adbust can list apps and remove
         the bad ones without installing anything.</p>
-      <p class="hint">Only Chromium-based browsers support WebUSB: Chrome,
-        Edge, Brave and Opera. <strong>Firefox and Safari have chosen not to
-        add it</strong> on security grounds, so there's no way for a page to
-        reach USB in them — it isn't something adbust can switch on. On a
+      <p class="hint">Chrome and Edge support WebUSB. <strong>Firefox and
+        Safari have chosen not to add it</strong> on security grounds, and
+        <strong>Brave switches it off</strong> even though it is built on
+        Chrome, so there's no way for a page to reach USB in them — it isn't
+        something adbust can switch on. On a
         Mac that means Chrome or Edge, not Safari. Phones and tablets can't
         be the controller either.</p>
       <p class="hint">If you're stuck on Firefox or Safari, the desktop version

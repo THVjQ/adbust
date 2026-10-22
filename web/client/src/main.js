@@ -1295,7 +1295,10 @@ function init() {
   $("#platform").textContent = { windows: "Windows PC", linux: "Linux PC",
                                  mac: "Mac" }[p] || "computer";
   if (p === "mobile") return showStep("mobile");
-  if (!manager || !window.isSecureContext) return showStep("browser");
+  // Brave ships without working WebUSB, Shields or not.
+  const brave = !!navigator.brave;
+  if (brave) $("#brave-note").hidden = false;
+  if (brave || !manager || !window.isSecureContext) return showStep("browser");
   showStep("connect");
   loadBad();
 
