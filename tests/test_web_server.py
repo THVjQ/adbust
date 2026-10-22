@@ -89,6 +89,31 @@ class Store(unittest.TestCase):
         how = self.s.conn.execute("SELECT how FROM reports").fetchone()[0]
         self.assertEqual(how, "manual")
 
+    def test_phone_counter(self):
+        ph1, ph2 = "0123456789abcdef", "fedcba9876543210"
+        self.s.track("connect", "client-aaaa", ph1)
+        self.s.track("connect", "client-aaaa", ph1)
+        self.s.track("connect", "client-aaaa", ph2)
+        self.s.track("remove", "client-aaaa", ph1)
+        self.s.track("connect", "client-aaaa", "not-a-hash")
+        self.s.report([{"pkg": TEST}], "client-aaaa", "ip")
+        st = self.s.stats()
+        self.assertEqual((st["phones"], st["phones_cleaned"], st["removals"]),
+                         (2, 1, 1))
+
+    def test_old_database_gets_phone_column(self):
+        import sqlite3
+        path = Path(tempfile.mkdtemp()) / "old.db"
+        c = sqlite3.connect(path)
+        c.execute("CREATE TABLE usage (event TEXT NOT NULL, "
+                  "client TEXT NOT NULL, at TEXT NOT NULL)")
+        c.execute("INSERT INTO usage VALUES ('visit','client-aaaa','x')")
+        c.commit()
+        c.close()
+        s = server.Store(path)
+        self.assertTrue(s.track("connect", "client-aaaa", "0123456789abcdef"))
+        self.assertEqual(s.stats()["phones"], 1)
+
     def test_desktop_adbust_can_read_it(self):
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
         import adbust

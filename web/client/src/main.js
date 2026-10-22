@@ -43,6 +43,7 @@ const state = {
   bad: new Map(),    // pkg -> shared database entry
   good: new Map(),   // pkg -> entry in the shared "sorted good" list
   sortMark: new Map(), // pkg -> good? : unsaved ticks in the sorter
+  phone: "",           // hash of the connected phone's serial, for counting
   opened: new Map(), // pkg -> {pkg,kind,activity,first,last,count}
   picked: new Set(),
   busy: false,
@@ -370,8 +371,20 @@ function track(event) {
   fetch("api/usage", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ client: clientId(), event }),
+    body: JSON.stringify({ client: clientId(), event, phone: state.phone }),
   }).catch(() => {});
+}
+
+// Lets the server count phones without ever seeing a serial number.
+async function phoneId(serial) {
+  try {
+    const buf = await crypto.subtle.digest("SHA-256",
+      new TextEncoder().encode("adbust-phone:" + serial));
+    return [...new Uint8Array(buf).slice(0, 8)]
+      .map((b) => b.toString(16).padStart(2, "0")).join("");
+  } catch {
+    return "";
+  }
 }
 
 // "added 20 Oct" from the database's UTC timestamp, in the viewer's time.
@@ -416,6 +429,7 @@ async function connect(device) {
     });
     state.adb = new Adb(transport);
     state.device = device;
+    state.phone = await phoneId(device.serial);
     state.adb.disconnected.then(onDisconnected, onDisconnected);
 
     const props = await sh("getprop ro.product.manufacturer; getprop " +
@@ -1009,13 +1023,30 @@ async function saveSort() {
   if (state.adb) renderApps();
 }
 
+async function loadStats() {
+  const box = $("#sort-stats");
+  try {
+    const s = await (await fetch("api/stats", { cache: "no-store" })).json();
+    const d = new Date(s.since).toLocaleDateString([],
+      { day: "numeric", month: "short", year: "numeric" });
+    box.replaceChildren(
+      el("b", {}, String(s.phones_cleaned)),
+      ` phone${s.phones_cleaned === 1 ? "" : "s"} cleaned · `,
+      el("b", {}, String(s.phones)),
+      ` connected (since ${d}) · `,
+      el("b", {}, String(s.removals)), " removals reported in total");
+  } catch {
+    box.textContent = "Counter unavailable.";
+  }
+}
+
 async function toggleSorter() {
   const card = $("#sorter");
   card.hidden = !card.hidden;
   if (card.hidden) return;
   $("#sort-result").textContent = "";
   state.sortMark.clear();
-  await Promise.all([loadGood(), loadBad()]);
+  await Promise.all([loadGood(), loadBad(), loadStats()]);
   renderSorter();
   card.scrollIntoView({ behavior: "smooth" });
 }

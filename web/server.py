@@ -29,6 +29,8 @@ PORT = int(os.environ.get("ADBUST_PORT", "8017"))
 
 PKG_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$")
 CLIENT_RE = re.compile(r"^[A-Za-z0-9-]{8,64}$")
+# A phone is a hash of its serial, made in the browser; the serial never leaves.
+PHONE_RE = re.compile(r"^[0-9a-f]{16}$")
 
 # Never accept reports for these, whatever the browser says: a poisoned
 # list must not be able to tell the next person to remove core system apps.
@@ -94,6 +96,10 @@ class Store:
                     PRIMARY KEY (pkg, client)
                 );
             """)
+            cols = [r[1] for r in self.conn.execute("PRAGMA table_info(usage)")]
+            if "phone" not in cols:  # added 2026-10-22
+                self.conn.execute("ALTER TABLE usage ADD COLUMN phone "
+                                  "TEXT NOT NULL DEFAULT ''")
 
     def badapps(self):
         """The shared list, in the same shape as the repo's badapps.json so
@@ -206,10 +212,12 @@ class Store:
                 accepted += 1 if cur.rowcount else 0
         return accepted
 
-    def track(self, event, client):
+    def track(self, event, client, phone=""):
         """Count one use of the site. Returns False if it was dropped."""
         if event not in USAGE_EVENTS:
             return False
+        if not PHONE_RE.match(phone):
+            phone = ""
         day_ago = datetime.fromtimestamp(time.time() - 86400, timezone.utc) \
             .strftime("%Y-%m-%d %H:%M:%S")
         with self.lock, self.conn:
@@ -218,9 +226,24 @@ class Store:
                 (client, day_ago)).fetchone()[0]
             if n >= MAX_USAGE_PER_CLIENT_DAY:
                 return False
-            self.conn.execute("INSERT INTO usage (event,client,at) "
-                              "VALUES (?,?,?)", (event, client, _now()))
+            self.conn.execute("INSERT INTO usage (event,client,phone,at) "
+                              "VALUES (?,?,?,?)", (event, client, phone, _now()))
         return True
+
+    def stats(self):
+        """Totals for the sorter's counter. Phones are only known from
+        2026-10-22 on, when the page started sending a phone id."""
+        with self.lock:
+            q = lambda sql: self.conn.execute(sql).fetchone()[0]
+            return {
+                "phones": q("SELECT COUNT(DISTINCT phone) FROM usage "
+                            "WHERE phone!='' AND event='connect'"),
+                "phones_cleaned": q("SELECT COUNT(DISTINCT phone) FROM usage "
+                                    "WHERE phone!='' AND event='remove'"),
+                "removals": q("SELECT COUNT(*) FROM reports"),
+                "since": (q("SELECT MIN(at) FROM usage WHERE phone!=''")
+                          or _now())[:10],
+            }
 
     def usage(self, days=7, tz=timezone.utc):
         """Per-day totals for the last `days` days, newest first, with days
@@ -287,6 +310,8 @@ class Handler(SimpleHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if path in ("/api/badapps", "/badapps.json"):
             return self._json(self.store.badapps())
+        if path == "/api/stats":
+            return self._json(self.store.stats())
         if path == "/api/goodapps":
             return self._json(self.store.goodapps())
         if path == "/api/health":
@@ -329,8 +354,8 @@ class Handler(SimpleHTTPRequestHandler):
         except (ValueError, json.JSONDecodeError, AttributeError):
             return self._json({"error": "bad request"},
                               HTTPStatus.BAD_REQUEST)
-        return self._json({"ok": self.store.track(str(doc.get("event")),
-                                                  client)})
+        return self._json({"ok": self.store.track(
+            str(doc.get("event")), client, str(doc.get("phone") or ""))})
 
 
 def print_usage(days):

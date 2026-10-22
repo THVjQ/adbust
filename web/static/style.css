@@ -173,6 +173,8 @@ dialog code { background: var(--raised); padding: 1px 5px; border-radius: 4px;
 .sortbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   margin: 8px 0; }
 .sortbar .grow { flex: 1; min-width: 160px; }
+.sortstats { margin: 4px 0 10px; font-size: 15px; }
+.sortstats b { color: var(--accent); font-size: 18px; }
 #sort-find { font: inherit; font-size: 14px; padding: 7px 10px;
   border: 1px solid var(--line); border-radius: 8px;
   background: var(--raised); color: var(--text); }
