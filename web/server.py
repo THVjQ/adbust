@@ -230,12 +230,22 @@ class Store:
                               "VALUES (?,?,?,?)", (event, client, phone, _now()))
         return True
 
-    def stats(self):
+    def stats(self, day_start=None):
         """Totals for the sorter's counter. Phones are only known from
-        2026-10-22 on, when the page started sending a phone id."""
+        2026-10-22 on, when the page started sending a phone id; visits
+        from 2026-10-21. `day_start` is the viewer's local midnight in UTC
+        ("YYYY-MM-DD HH:MM:SS"), for the "today" figure."""
         with self.lock:
-            q = lambda sql: self.conn.execute(sql).fetchone()[0]
+            q = lambda sql, *a: self.conn.execute(sql, a).fetchone()[0]
             return {
+                "visits": q("SELECT COUNT(*) FROM usage WHERE event='visit'"),
+                "visitors": q("SELECT COUNT(DISTINCT client) FROM usage "
+                              "WHERE event='visit'"),
+                "visits_today": q("SELECT COUNT(*) FROM usage WHERE "
+                                  "event='visit' AND at>=?", day_start)
+                                if day_start else None,
+                "visits_since": (q("SELECT MIN(at) FROM usage WHERE "
+                                   "event='visit'") or _now())[:10],
                 "phones": q("SELECT COUNT(DISTINCT phone) FROM usage "
                             "WHERE phone!='' AND event='connect'"),
                 "phones_cleaned": q("SELECT COUNT(DISTINCT phone) FROM usage "
@@ -311,7 +321,10 @@ class Handler(SimpleHTTPRequestHandler):
         if path in ("/api/badapps", "/badapps.json"):
             return self._json(self.store.badapps())
         if path == "/api/stats":
-            return self._json(self.store.stats())
+            m = re.search(r"[?&]today=(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)Z",
+                          self.path)
+            return self._json(self.store.stats(
+                m.group(1).replace("T", " ") if m else None))
         if path == "/api/goodapps":
             return self._json(self.store.goodapps())
         if path == "/api/health":

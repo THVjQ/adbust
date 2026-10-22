@@ -97,9 +97,15 @@ class Store(unittest.TestCase):
         self.s.track("remove", "client-aaaa", ph1)
         self.s.track("connect", "client-aaaa", "not-a-hash")
         self.s.report([{"pkg": TEST}], "client-aaaa", "ip")
-        st = self.s.stats()
+        self.s.track("visit", "client-aaaa")
+        self.s.track("visit", "client-bbbb")
+        st = self.s.stats("2000-01-01 00:00:00")
         self.assertEqual((st["phones"], st["phones_cleaned"], st["removals"]),
                          (2, 1, 1))
+        self.assertEqual((st["visits"], st["visitors"], st["visits_today"]),
+                         (2, 2, 2))
+        self.assertEqual(self.s.stats("2999-01-01 00:00:00")["visits_today"],
+                         0)
 
     def test_old_database_gets_phone_column(self):
         import sqlite3

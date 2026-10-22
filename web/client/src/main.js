@@ -1026,10 +1026,20 @@ async function saveSort() {
 async function loadStats() {
   const box = $("#sort-stats");
   try {
-    const s = await (await fetch("api/stats", { cache: "no-store" })).json();
-    const d = new Date(s.since).toLocaleDateString([],
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    const today = midnight.toISOString().slice(0, 19) + "Z";
+    const s = await (await fetch(`api/stats?today=${today}`,
+                                 { cache: "no-store" })).json();
+    const day = (x) => new Date(x).toLocaleDateString([],
       { day: "numeric", month: "short", year: "numeric" });
+    const d = day(s.since);
     box.replaceChildren(
+      el("b", {}, String(s.visits_today)), " visits today · ",
+      el("b", {}, String(s.visits)), " visits by ",
+      el("b", {}, String(s.visitors)),
+      ` visitor${s.visitors === 1 ? "" : "s"} since ${day(s.visits_since)}`,
+      el("br"),
       el("b", {}, String(s.phones_cleaned)),
       ` phone${s.phones_cleaned === 1 ? "" : "s"} cleaned · `,
       el("b", {}, String(s.phones)),
